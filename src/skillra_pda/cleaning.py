@@ -194,6 +194,15 @@ def handle_missingness(df: pd.DataFrame, drop_threshold: float = 0.95) -> pd.Dat
 
     df, boolean_cols = normalize_boolean_columns(df, force_columns={"salary_gross"})
 
+    # Ensure salary_gross is firmly cast even if upstream contamination sneaks in.
+    if "salary_gross" in df.columns:
+        coerced, _ = coerce_bool_like_series(
+            df["salary_gross"], null_markers=BOOL_NULL_MARKERS, force=True
+        )
+        df["salary_gross"] = coerced.astype("boolean")
+        if "salary_gross" not in boolean_cols:
+            boolean_cols.append("salary_gross")
+
     categorical_cols = [
         col
         for col in df.columns
