@@ -214,4 +214,16 @@ def assemble_features(df: pd.DataFrame) -> pd.DataFrame:
     df = add_primary_role(df)
     df = add_salary_bucket(df)
     df = add_text_features(df)
+    # Guarantee downstream notebook selections always succeed, even if upstream
+    # fields were dropped or missing from the source dataset.
+    expected_defaults = {
+        "published_weekday": pd.NA,
+        "city_tier": "unknown",
+        "work_mode": "unknown",
+        "primary_role": "other",
+        "salary_bucket": pd.NA,
+    }
+    for col, default in expected_defaults.items():
+        if col not in df.columns:
+            df[col] = default
     return df
