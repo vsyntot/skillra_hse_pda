@@ -4,7 +4,7 @@ from typing import Union
 
 import pandas as pd
 
-from .cleaning import coerce_bool_like_series
+from .cleaning import BOOL_NULL_MARKERS, coerce_bool_like_series, is_boolean_like_series
 
 PathLike = Union[str, Path]
 
@@ -38,10 +38,18 @@ def save_processed(df: pd.DataFrame, path: PathLike) -> None:
 
     for col in df_to_save.columns:
         dtype_str = str(df_to_save[col].dtype)
-        if dtype_str == "object" or dtype_str.startswith("category"):
-            coerced, did_cast = coerce_bool_like_series(df_to_save[col], force=True)
-            if did_cast:
-                df_to_save[col] = coerced
+        if dtype_str in {"object", "string", "bool"} or dtype_str.startswith("category"):
+            if is_boolean_like_series(df_to_save[col], null_markers=BOOL_NULL_MARKERS):
+                coerced, did_cast = coerce_bool_like_series(
+                    df_to_save[col], null_markers=BOOL_NULL_MARKERS, force=True
+                )
+                if did_cast:
+                    df_to_save[col] = coerced
+
+    if "salary_gross" in df_to_save.columns:
+        df_to_save["salary_gross"] = coerce_bool_like_series(
+            df_to_save["salary_gross"], null_markers=BOOL_NULL_MARKERS, force=True
+        )[0]
 
     if output_path.suffix.lower() == ".parquet":
         df_to_save.to_parquet(output_path, index=False)

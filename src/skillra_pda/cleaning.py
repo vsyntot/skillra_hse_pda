@@ -8,6 +8,8 @@ import pandas as pd
 
 PREFIX_GROUPS = ["has_", "skill_", "benefit_", "soft_", "domain_", "role_"]
 BOOL_NULL_MARKERS = {"unknown", "Unknown", "UNKNOWN", ""}
+BOOL_TRUE_MARKERS = {True, 1, "1", "true", "True"}
+BOOL_FALSE_MARKERS = {False, 0, "0", "false", "False"}
 
 
 def _normalize_bool_like(value, null_lower: set) -> object:
@@ -81,6 +83,23 @@ def coerce_bool_like_series(
     return coerced.astype("boolean"), True
 
 
+def is_boolean_like_series(series: pd.Series, null_markers: Iterable[str] | None = None) -> bool:
+    """Check whether a series only contains boolean-like values (plus null markers).
+
+    Nulls are ignored for the check; any non-boolean-like value will return False.
+    """
+
+    markers = set(null_markers) if null_markers is not None else BOOL_NULL_MARKERS
+    null_lower = {m.strip().lower() for m in markers}
+
+    uniques = series.dropna().unique()
+    for val in uniques:
+        normalized = _normalize_bool_like(val, null_lower)
+        if normalized is None:
+            return False
+    return True
+
+
 def basic_profile(df: pd.DataFrame) -> Dict[str, object]:
     """Return a lightweight profile of the dataframe."""
     missing = df.isna().mean().sort_values(ascending=False).head(20)
@@ -131,14 +150,16 @@ def handle_missingness(df: pd.DataFrame, drop_threshold: float = 0.95) -> pd.Dat
 
     boolean_cols: List[str] = []
     for col in df.columns:
-        coerced, did_cast = coerce_bool_like_series(df[col])
-        if did_cast:
-            df[col] = coerced
-            boolean_cols.append(col)
+        if is_boolean_like_series(df[col]):
+            coerced, did_cast = coerce_bool_like_series(df[col], force=True)
+            if did_cast:
+                df[col] = coerced
+                boolean_cols.append(col)
 
     # salary_gross must stay boolean even if stray strings appeared upstream
     if "salary_gross" in df.columns:
-        coerced, _ = coerce_bool_like_series(df["salary_gross"], force=True)
+        sg = df["salary_gross"].replace({m: pd.NA for m in BOOL_NULL_MARKERS})
+        coerced, _ = coerce_bool_like_series(sg, force=True)
         df["salary_gross"] = coerced
         if "salary_gross" not in boolean_cols:
             boolean_cols.append("salary_gross")
