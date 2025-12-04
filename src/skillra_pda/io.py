@@ -37,7 +37,8 @@ def save_processed(df: pd.DataFrame, path: PathLike) -> None:
     df_to_save = df.copy()
 
     for col in df_to_save.columns:
-        if df_to_save[col].dtype == "object":
+        dtype_str = str(df_to_save[col].dtype)
+        if dtype_str == "object" or dtype_str.startswith("category"):
             coerced, did_cast = coerce_bool_like_series(df_to_save[col], force=True)
             if did_cast:
                 df_to_save[col] = coerced

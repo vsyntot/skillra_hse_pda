@@ -136,10 +136,11 @@ def handle_missingness(df: pd.DataFrame, drop_threshold: float = 0.95) -> pd.Dat
             df[col] = coerced
             boolean_cols.append(col)
 
-    if "salary_gross" in df.columns and "salary_gross" not in boolean_cols:
-        coerced, did_cast = coerce_bool_like_series(df["salary_gross"], force=True)
-        if did_cast:
-            df["salary_gross"] = coerced
+    # salary_gross must stay boolean even if stray strings appeared upstream
+    if "salary_gross" in df.columns:
+        coerced, _ = coerce_bool_like_series(df["salary_gross"], force=True)
+        df["salary_gross"] = coerced
+        if "salary_gross" not in boolean_cols:
             boolean_cols.append("salary_gross")
 
     categorical_cols = [
