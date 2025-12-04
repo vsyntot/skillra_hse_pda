@@ -45,6 +45,12 @@ def save_processed(df: pd.DataFrame, path: PathLike) -> None:
         df_to_save, null_markers=BOOL_NULL_MARKERS, force_columns={"salary_gross"}
     )
 
+    if "salary_gross" in df_to_save.columns:
+        coerced, _ = coerce_bool_like_series(
+            df_to_save["salary_gross"], null_markers=BOOL_NULL_MARKERS, force=True
+        )
+        df_to_save["salary_gross"] = coerced.astype("boolean")
+
     for col in df_to_save.columns:
         dtype_str = str(df_to_save[col].dtype)
         if dtype_str in {"object", "string", "bool"} or dtype_str.startswith("category"):
