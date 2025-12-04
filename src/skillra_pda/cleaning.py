@@ -100,6 +100,50 @@ def is_boolean_like_series(series: pd.Series, null_markers: Iterable[str] | None
     return True
 
 
+def normalize_boolean_columns(
+    df: pd.DataFrame,
+    null_markers: Iterable[str] | None = None,
+    force_columns: Iterable[str] | None = None,
+) -> Tuple[pd.DataFrame, List[str]]:
+    """Coerce boolean-like columns to pandas nullable booleans.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataframe. It is modified in place.
+    null_markers : Iterable[str] | None
+        Markers that should be treated as unknown/NA before coercion.
+    force_columns : Iterable[str] | None
+        Columns that must be coerced regardless of boolean-likeness checks.
+    """
+
+    markers = set(null_markers) if null_markers is not None else BOOL_NULL_MARKERS
+    forced = set(force_columns) if force_columns is not None else set()
+    boolean_cols: List[str] = []
+
+    for col in df.columns:
+        series = df[col]
+        dtype_str = str(series.dtype)
+
+        if dtype_str == "boolean":
+            boolean_cols.append(col)
+            continue
+
+        should_force = col in forced
+        should_try = should_force or dtype_str == "bool" or dtype_str.startswith("bool")
+        should_try = should_try or is_boolean_like_series(series, null_markers=markers)
+
+        if not should_try:
+            continue
+
+        coerced, did_cast = coerce_bool_like_series(series, null_markers=markers, force=True)
+        if should_force or did_cast:
+            df[col] = coerced
+            boolean_cols.append(col)
+
+    return df, boolean_cols
+
+
 def basic_profile(df: pd.DataFrame) -> Dict[str, object]:
     """Return a lightweight profile of the dataframe."""
     missing = df.isna().mean().sort_values(ascending=False).head(20)
@@ -148,21 +192,7 @@ def handle_missingness(df: pd.DataFrame, drop_threshold: float = 0.95) -> pd.Dat
         df = df.drop(columns=list(to_drop))
         df.attrs["dropped_columns"] = list(to_drop)
 
-    boolean_cols: List[str] = []
-    for col in df.columns:
-        if is_boolean_like_series(df[col]):
-            coerced, did_cast = coerce_bool_like_series(df[col], force=True)
-            if did_cast:
-                df[col] = coerced
-                boolean_cols.append(col)
-
-    # salary_gross must stay boolean even if stray strings appeared upstream
-    if "salary_gross" in df.columns:
-        sg = df["salary_gross"].replace({m: pd.NA for m in BOOL_NULL_MARKERS})
-        coerced, _ = coerce_bool_like_series(sg, force=True)
-        df["salary_gross"] = coerced
-        if "salary_gross" not in boolean_cols:
-            boolean_cols.append("salary_gross")
+    df, boolean_cols = normalize_boolean_columns(df, force_columns={"salary_gross"})
 
     categorical_cols = [
         col
@@ -189,7 +219,11 @@ def handle_missingness(df: pd.DataFrame, drop_threshold: float = 0.95) -> pd.Dat
 def salary_prepare(df: pd.DataFrame) -> pd.DataFrame:
     """Create salary helper columns and cap outliers for RUB."""
     if "salary_mid" in df.columns:
-        df["salary_mid_rub"] = np.where(df.get("currency") == "RUB", df["salary_mid"], np.nan)
+        currency_series = df.get("currency")
+        mask = currency_series == "RUB" if currency_series is not None else False
+        if isinstance(mask, pd.Series):
+            mask = mask.fillna(False)
+        df["salary_mid_rub"] = np.where(mask, df["salary_mid"], np.nan)
     else:
         df["salary_mid_rub"] = np.nan
 
