@@ -7,6 +7,7 @@ import pandas as pd
 from .cleaning import (
     BOOL_NULL_MARKERS,
     coerce_bool_like_series,
+    ensure_salary_gross_boolean,
     is_boolean_like_series,
     normalize_boolean_columns,
 )
@@ -45,11 +46,7 @@ def save_processed(df: pd.DataFrame, path: PathLike) -> None:
         df_to_save, null_markers=BOOL_NULL_MARKERS, force_columns={"salary_gross"}
     )
 
-    if "salary_gross" in df_to_save.columns:
-        coerced, _ = coerce_bool_like_series(
-            df_to_save["salary_gross"], null_markers=BOOL_NULL_MARKERS, force=True
-        )
-        df_to_save["salary_gross"] = coerced.astype("boolean")
+    df_to_save = ensure_salary_gross_boolean(df_to_save)
 
     for col in df_to_save.columns:
         dtype_str = str(df_to_save[col].dtype)
