@@ -48,6 +48,11 @@ def add_time_features(df: pd.DataFrame, date_col: str = "published_at_iso") -> p
         df["published_weekday"] = dt.dt.weekday
         df["published_month"] = dt.dt.month
         df["is_weekend_post"] = dt.dt.weekday.isin([5, 6])
+    else:
+        # Keep downstream expectations stable even if the source column was dropped upstream.
+        df["published_weekday"] = pd.NA
+        df["published_month"] = pd.NA
+        df["is_weekend_post"] = pd.NA
     return df
 
 
@@ -146,6 +151,9 @@ def add_salary_bucket(
         labels = ["low", "mid", "high"]
 
     df = df.copy()
+    if salary_col not in df.columns:
+        df[salary_col] = np.nan
+
     valid = df[salary_col].dropna()
     if len(valid) >= len(labels):
         df.loc[valid.index, "salary_bucket"] = pd.qcut(valid, q=len(labels), labels=labels, duplicates="drop")
