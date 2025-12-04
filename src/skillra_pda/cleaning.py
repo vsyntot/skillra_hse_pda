@@ -57,7 +57,22 @@ def handle_missingness(df: pd.DataFrame, drop_threshold: float = 0.95) -> pd.Dat
         df = df.drop(columns=list(to_drop))
         df.attrs["dropped_columns"] = list(to_drop)
 
-    bool_like_values = {True, False, 1, 0, "1", "0", "true", "false", "True", "False"}
+    bool_like_values = {
+        True,
+        False,
+        1,
+        0,
+        "1",
+        "0",
+        "true",
+        "false",
+        "True",
+        "False",
+        "unknown",
+        "Unknown",
+        "UNKNOWN",
+        "",
+    }
     boolean_cols: List[str] = []
     for col in df.columns:
         if df[col].dtype == bool:
@@ -67,7 +82,7 @@ def handle_missingness(df: pd.DataFrame, drop_threshold: float = 0.95) -> pd.Dat
 
         if df[col].dtype == "object":
             unique_non_na = set(df[col].dropna().unique())
-            if unique_non_na and unique_non_na.issubset(bool_like_values | {"unknown"}):
+            if unique_non_na and unique_non_na.issubset(bool_like_values):
                 df[col] = (
                     df[col]
                     .replace(
@@ -79,6 +94,9 @@ def handle_missingness(df: pd.DataFrame, drop_threshold: float = 0.95) -> pd.Dat
                             "True": True,
                             "False": False,
                             "unknown": pd.NA,
+                            "Unknown": pd.NA,
+                            "UNKNOWN": pd.NA,
+                            "": pd.NA,
                         }
                     )
                     .astype("boolean")
