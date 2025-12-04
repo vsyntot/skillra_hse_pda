@@ -57,10 +57,39 @@ def handle_missingness(df: pd.DataFrame, drop_threshold: float = 0.95) -> pd.Dat
         df = df.drop(columns=list(to_drop))
         df.attrs["dropped_columns"] = list(to_drop)
 
+    bool_like_values = {True, False, 1, 0, "1", "0", "true", "false", "True", "False"}
+    boolean_cols: List[str] = []
+    for col in df.columns:
+        if df[col].dtype == bool:
+            df[col] = df[col].astype("boolean")
+            boolean_cols.append(col)
+            continue
+
+        if df[col].dtype == "object":
+            unique_non_na = set(df[col].dropna().unique())
+            if unique_non_na and unique_non_na.issubset(bool_like_values | {"unknown"}):
+                df[col] = (
+                    df[col]
+                    .replace(
+                        {
+                            "1": True,
+                            "0": False,
+                            "true": True,
+                            "false": False,
+                            "True": True,
+                            "False": False,
+                            "unknown": pd.NA,
+                        }
+                    )
+                    .astype("boolean")
+                )
+                boolean_cols.append(col)
+
     categorical_cols = [
         col
         for col in df.columns
-        if df[col].dtype == "object" or str(df[col].dtype).startswith("category")
+        if (df[col].dtype == "object" or str(df[col].dtype).startswith("category"))
+        and col not in boolean_cols
     ]
     for col in categorical_cols:
         df[col] = df[col].fillna("unknown")
