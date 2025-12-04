@@ -7,6 +7,78 @@ import numpy as np
 import pandas as pd
 
 PREFIX_GROUPS = ["has_", "skill_", "benefit_", "soft_", "domain_", "role_"]
+BOOL_NULL_MARKERS = {"unknown", "Unknown", "UNKNOWN", ""}
+
+
+def _normalize_bool_like(value, null_lower: set) -> object:
+    """Normalize a single value to True/False/pd.NA if it is boolean-like.
+
+    Returns None when the value is not recognized as boolean-like.
+    """
+
+    if pd.isna(value):
+        return pd.NA
+
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, (int, np.integer)):
+        if value in (0, 1):
+            return bool(value)
+        return None
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        lowered = stripped.lower()
+        if lowered in null_lower:
+            return pd.NA
+        if lowered in {"true", "1"}:
+            return True
+        if lowered in {"false", "0"}:
+            return False
+
+    return None
+
+
+def coerce_bool_like_series(
+    series: pd.Series,
+    null_markers: Iterable[str] | None = None,
+    force: bool = False,
+) -> Tuple[pd.Series, bool]:
+    """Convert boolean-like values to pandas nullable boolean dtype.
+
+    Parameters
+    ----------
+    series : pd.Series
+        Series to process.
+    null_markers : Iterable[str] | None, optional
+        Markers that should be treated as null/unknown before casting.
+    force : bool, optional
+        If True, unrecognized values are coerced to NA to allow casting. If
+        False, the function returns (series, False) when encountering
+        non-boolean-like values.
+    """
+
+    markers = set(null_markers) if null_markers is not None else BOOL_NULL_MARKERS
+    null_lower = {m.strip().lower() for m in markers}
+
+    uniques = series.dropna().unique()
+    for val in uniques:
+        normalized = _normalize_bool_like(val, null_lower)
+        if normalized is None and not force:
+            return series, False
+
+    def _convert(val):
+        normalized = _normalize_bool_like(val, null_lower)
+        if normalized is None:
+            return pd.NA if force else normalized
+        return normalized
+
+    coerced = series.map(_convert)
+    if not force and coerced.isna().any() and len(series.dropna()) > 0:
+        return series, False
+
+    return coerced.astype("boolean"), True
 
 
 def basic_profile(df: pd.DataFrame) -> Dict[str, object]:
@@ -57,51 +129,18 @@ def handle_missingness(df: pd.DataFrame, drop_threshold: float = 0.95) -> pd.Dat
         df = df.drop(columns=list(to_drop))
         df.attrs["dropped_columns"] = list(to_drop)
 
-    bool_like_values = {
-        True,
-        False,
-        1,
-        0,
-        "1",
-        "0",
-        "true",
-        "false",
-        "True",
-        "False",
-        "unknown",
-        "Unknown",
-        "UNKNOWN",
-        "",
-    }
     boolean_cols: List[str] = []
     for col in df.columns:
-        if df[col].dtype == bool:
-            df[col] = df[col].astype("boolean")
+        coerced, did_cast = coerce_bool_like_series(df[col])
+        if did_cast:
+            df[col] = coerced
             boolean_cols.append(col)
-            continue
 
-        if df[col].dtype == "object":
-            unique_non_na = set(df[col].dropna().unique())
-            if unique_non_na and unique_non_na.issubset(bool_like_values):
-                df[col] = (
-                    df[col]
-                    .replace(
-                        {
-                            "1": True,
-                            "0": False,
-                            "true": True,
-                            "false": False,
-                            "True": True,
-                            "False": False,
-                            "unknown": pd.NA,
-                            "Unknown": pd.NA,
-                            "UNKNOWN": pd.NA,
-                            "": pd.NA,
-                        }
-                    )
-                    .astype("boolean")
-                )
-                boolean_cols.append(col)
+    if "salary_gross" in df.columns and "salary_gross" not in boolean_cols:
+        coerced, did_cast = coerce_bool_like_series(df["salary_gross"], force=True)
+        if did_cast:
+            df["salary_gross"] = coerced
+            boolean_cols.append("salary_gross")
 
     categorical_cols = [
         col
