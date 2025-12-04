@@ -66,3 +66,14 @@ def junior_friendly_share(df: pd.DataFrame, flags: Iterable[str]) -> pd.Series:
     if not usable:
         return pd.Series(dtype="float64")
     return df[usable].mean().sort_values(ascending=False)
+
+
+__all__ = [
+    "missing_share",
+    "describe_salary_by_group",
+    "describe_salary_two_dim",
+    "correlation_matrix",
+    "top_value_counts",
+    "skill_frequency",
+    "junior_friendly_share",
+]
