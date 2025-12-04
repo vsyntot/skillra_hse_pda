@@ -55,6 +55,7 @@ def handle_missingness(df: pd.DataFrame, drop_threshold: float = 0.95) -> pd.Dat
     to_drop = col_missing[col_missing >= drop_threshold].index
     if len(to_drop) > 0:
         df = df.drop(columns=list(to_drop))
+        df.attrs["dropped_columns"] = list(to_drop)
 
     categorical_cols = [
         col
@@ -108,4 +109,7 @@ def deduplicate(df: pd.DataFrame, id_col: str = "vacancy_id") -> pd.DataFrame:
     sort_col = "scraped_at_utc" if "scraped_at_utc" in df.columns else None
     if sort_col:
         df = df.sort_values(by=sort_col, ascending=False)
-    return df.drop_duplicates(subset=[id_col], keep="first")
+    before = len(df)
+    df = df.drop_duplicates(subset=[id_col], keep="first")
+    df.attrs["deduplicated_rows"] = before - len(df)
+    return df
