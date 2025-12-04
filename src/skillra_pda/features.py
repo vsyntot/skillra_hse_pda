@@ -204,18 +204,9 @@ def compute_skill_premium(
     return pd.DataFrame(records).sort_values(by="premium_pct", ascending=False)
 
 
-def assemble_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Convenience pipeline for feature dataframe."""
-    grouped = detect_column_groups(df)
-    df = add_time_features(df)
-    df = add_city_tier(df)
-    df = add_work_mode(df)
-    df = add_boolean_counts(df, groups=grouped)
-    df = add_primary_role(df)
-    df = add_salary_bucket(df)
-    df = add_text_features(df)
-    # Guarantee downstream notebook selections always succeed, even if upstream
-    # fields were dropped or missing from the source dataset.
+def ensure_expected_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Backfill core derived columns with safe defaults if missing."""
+
     expected_defaults = {
         "published_weekday": pd.NA,
         "city_tier": "unknown",
@@ -227,3 +218,16 @@ def assemble_features(df: pd.DataFrame) -> pd.DataFrame:
         if col not in df.columns:
             df[col] = default
     return df
+
+
+def assemble_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Convenience pipeline for feature dataframe."""
+    grouped = detect_column_groups(df)
+    df = add_time_features(df)
+    df = add_city_tier(df)
+    df = add_work_mode(df)
+    df = add_boolean_counts(df, groups=grouped)
+    df = add_primary_role(df)
+    df = add_salary_bucket(df)
+    df = add_text_features(df)
+    return ensure_expected_feature_columns(df)
