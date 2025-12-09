@@ -15,48 +15,51 @@ class Persona:
     current_skills: List[str]
     target_filter: Dict[str, object] = field(default_factory=dict)
 
-    def __init__(self, name: str, current_skills: List[str], target_filter: Dict[str, object] | None = None, description: str = ""):
-        # Explicit __init__ keeps compatibility with older notebook checkpoints that may still
-        # instantiate Persona with or without a description keyword.
-        self.name = name
-        self.description = description
-        self.current_skills = list(current_skills)
-        self.target_filter = target_filter or {}
-
 
 __all__ = ["Persona", "skill_gap_for_persona", "plot_persona_skill_gap"]
 
 
-def skill_gap_for_persona(df: pd.DataFrame, persona: Persona, top_k: int = 10) -> pd.DataFrame:
-    """Calculate skill gaps for a given persona with market prevalence."""
-
-    df_filtered = df.copy()
-    for key, value in persona.target_filter.items():
-        if key not in df_filtered.columns:
+def _filter_by_target(df: pd.DataFrame, target_filter: Dict[str, object]) -> pd.DataFrame:
+    filtered = df.copy()
+    for key, value in target_filter.items():
+        if key not in filtered.columns:
             continue
         if isinstance(value, (list, tuple, set)):
-            df_filtered = df_filtered[df_filtered[key].isin(value)]
+            filtered = filtered[filtered[key].isin(value)]
         else:
-            df_filtered = df_filtered[df_filtered[key] == value]
+            filtered = filtered[filtered[key] == value]
+    return filtered
 
-    skill_cols = [col for col in df_filtered.columns if col.startswith("skill_") or col.startswith("has_")]
-    if not skill_cols:
+
+def skill_gap_for_persona(
+    df: pd.DataFrame, persona: Persona, skill_cols: List[str], min_share: float = 0.1
+) -> pd.DataFrame:
+    """
+    Calculate market share of skills for persona targets and mark gaps.
+
+    Returns columns: skill_name, market_share, persona_has (0/1), gap (bool).
+    """
+
+    df_filtered = _filter_by_target(df, persona.target_filter)
+    present_skills = [col for col in skill_cols if col in df_filtered.columns]
+    if not present_skills:
         return pd.DataFrame(columns=["skill_name", "market_share", "persona_has", "gap"])
 
-    freq = df_filtered[skill_cols].mean().sort_values(ascending=False).head(top_k)
-
-    rows = []
-    for skill, market_share in freq.items():
-        persona_has = 1 if skill in persona.current_skills else 0
+    rows: list[dict[str, object]] = []
+    for col in present_skills:
+        share = df_filtered[col].fillna(False).astype(bool).mean()
+        persona_has = 1 if col in persona.current_skills else 0
         rows.append(
             {
-                "skill_name": skill,
-                "market_share": market_share,
+                "skill_name": col,
+                "market_share": share,
                 "persona_has": persona_has,
-                "gap": not bool(persona_has),
+                "gap": persona_has == 0 and share >= min_share,
             }
         )
-    return pd.DataFrame(rows)
+
+    result = pd.DataFrame(rows)
+    return result.sort_values(by="market_share", ascending=False)
 
 
 def plot_persona_skill_gap(gap_df: pd.DataFrame, persona: Persona, output_dir: Path | None = None) -> Path:
