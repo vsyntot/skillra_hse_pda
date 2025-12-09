@@ -15,6 +15,14 @@ class Persona:
     current_skills: List[str]
     target_filter: Dict[str, object] = field(default_factory=dict)
 
+    def __init__(self, name: str, current_skills: List[str], target_filter: Dict[str, object] | None = None, description: str = ""):
+        # Explicit __init__ keeps compatibility with older notebook checkpoints that may still
+        # instantiate Persona with or without a description keyword.
+        self.name = name
+        self.description = description
+        self.current_skills = list(current_skills)
+        self.target_filter = target_filter or {}
+
 
 __all__ = ["Persona", "skill_gap_for_persona", "plot_persona_skill_gap"]
 
