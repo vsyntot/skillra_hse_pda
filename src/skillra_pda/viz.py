@@ -113,12 +113,21 @@ def skill_heatmap(
     if not present_skills:
         raise KeyError("Не найдены колонки навыков для heatmap")
 
-    freq = df[present_skills].mean().sort_values(ascending=False)
+    numeric_skills = df[present_skills].apply(pd.to_numeric, errors="coerce")
+    freq = numeric_skills.mean().sort_values(ascending=False)
     top_skills = freq.head(top_n).index
-    pivot = df.groupby(index_col)[list(top_skills)].mean()
+
+    grouped = (
+        pd.concat([df[[index_col]], numeric_skills[top_skills]], axis=1)
+        .groupby(index_col)
+        .mean()
+    )
+    pivot = grouped.fillna(0.0).astype(float)
+    if pivot.empty:
+        raise ValueError("Нет данных для построения heatmap")
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    cax = ax.imshow(pivot, aspect="auto", cmap="Blues")
+    cax = ax.imshow(pivot.values.astype(float), aspect="auto", cmap="Blues")
     ax.set_xticks(range(len(top_skills)))
     ax.set_xticklabels(top_skills, rotation=90)
     ax.set_yticks(range(len(pivot.index)))
