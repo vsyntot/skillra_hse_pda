@@ -16,6 +16,9 @@ class Persona:
     target_filter: Dict[str, object] = field(default_factory=dict)
 
 
+__all__ = ["Persona", "skill_gap_for_persona", "plot_persona_skill_gap"]
+
+
 def skill_gap_for_persona(df: pd.DataFrame, persona: Persona, top_k: int = 10) -> pd.DataFrame:
     """Calculate skill gaps for a given persona with market prevalence."""
 
