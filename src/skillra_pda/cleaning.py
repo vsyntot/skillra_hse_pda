@@ -10,6 +10,7 @@ PREFIX_GROUPS = ["has_", "skill_", "benefit_", "soft_", "domain_", "role_"]
 BOOL_NULL_MARKERS = {"unknown", "Unknown", "UNKNOWN", ""}
 BOOL_TRUE_MARKERS = {True, 1, "1", "true", "True"}
 BOOL_FALSE_MARKERS = {False, 0, "0", "false", "False"}
+BOOLEAN_MARKERS = BOOL_TRUE_MARKERS | BOOL_FALSE_MARKERS | BOOL_NULL_MARKERS
 
 
 def _normalize_bool_like(value, null_lower: set) -> object:
@@ -227,14 +228,25 @@ def ensure_salary_gross_boolean(df: pd.DataFrame) -> pd.DataFrame:
     if "salary_gross" not in df.columns:
         return df
 
-    sanitized = df["salary_gross"].replace({
+    replacement_map = {
         "unknown": pd.NA,
         "Unknown": pd.NA,
         "UNKNOWN": pd.NA,
         "": pd.NA,
-    })
+        "true": True,
+        "false": False,
+        "True": True,
+        "False": False,
+        "1": True,
+        "0": False,
+    }
+
+    series = df["salary_gross"].copy()
+    if series.dtype == "object":
+        series = series.replace(replacement_map)
+
     coerced, _ = coerce_bool_like_series(
-        sanitized, null_markers=BOOL_NULL_MARKERS, force=True
+        series, null_markers=BOOL_NULL_MARKERS, force=True
     )
     df["salary_gross"] = coerced.astype("boolean")
     return df

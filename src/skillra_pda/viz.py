@@ -22,7 +22,14 @@ def _save_fig(fig: plt.Figure, filename: str) -> Path:
     return output
 
 
+def _require_columns(df: pd.DataFrame, cols: Iterable[str], func_name: str) -> None:
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise KeyError(f"Функция {func_name} ожидала колонки {missing}")
+
+
 def salary_by_grade_box(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped") -> Path:
+    _require_columns(df, ["grade", salary_col], "salary_by_grade_box")
     fig, ax = plt.subplots(figsize=(8, 5))
     df.boxplot(column=salary_col, by="grade", ax=ax)
     ax.set_title("Salary by grade")
@@ -33,6 +40,7 @@ def salary_by_grade_box(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capp
 
 
 def salary_by_role_box(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped", top_n: int = 8) -> Path:
+    _require_columns(df, ["primary_role", salary_col], "salary_by_role_box")
     top_roles = df["primary_role"].value_counts().head(top_n).index
     filtered = df[df["primary_role"].isin(top_roles)]
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -45,6 +53,7 @@ def salary_by_role_box(df: pd.DataFrame, salary_col: str = "salary_mid_rub_cappe
 
 
 def work_mode_share_by_city(df: pd.DataFrame) -> Path:
+    _require_columns(df, ["city_tier", "work_mode"], "work_mode_share_by_city")
     pivot = pd.crosstab(df["city_tier"], df["work_mode"], normalize="index")
     fig, ax = plt.subplots(figsize=(8, 5))
     pivot.plot(kind="bar", stacked=True, ax=ax)
@@ -56,6 +65,7 @@ def work_mode_share_by_city(df: pd.DataFrame) -> Path:
 
 
 def top_skills_bar(df: pd.DataFrame, skill_cols: Iterable[str], role_filter: str = "data", top_n: int = 15) -> Path:
+    _require_columns(df, ["primary_role"], "top_skills_bar")
     role_mask = df["primary_role"].str.contains(role_filter, case=False, na=False)
     freq = df.loc[role_mask, skill_cols].sum().sort_values(ascending=False).head(top_n)
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -86,3 +96,33 @@ def corr_heatmap(corr: pd.DataFrame) -> Path:
     fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04)
     ax.set_title("Correlation heatmap")
     return _save_fig(fig, "fig_corr_heatmap.png")
+
+
+def skill_heatmap(
+    df: pd.DataFrame,
+    index_col: str,
+    skill_cols: Iterable[str],
+    title: str,
+    filename: str,
+    top_n: int = 20,
+) -> Path:
+    """Plot heatmap of skill prevalence across a categorical segment."""
+
+    _require_columns(df, [index_col], "skill_heatmap")
+    present_skills = [col for col in skill_cols if col in df.columns]
+    if not present_skills:
+        raise KeyError("Не найдены колонки навыков для heatmap")
+
+    freq = df[present_skills].mean().sort_values(ascending=False)
+    top_skills = freq.head(top_n).index
+    pivot = df.groupby(index_col)[list(top_skills)].mean()
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    cax = ax.imshow(pivot, aspect="auto", cmap="Blues")
+    ax.set_xticks(range(len(top_skills)))
+    ax.set_xticklabels(top_skills, rotation=90)
+    ax.set_yticks(range(len(pivot.index)))
+    ax.set_yticklabels(pivot.index)
+    fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04, label="Share")
+    ax.set_title(title)
+    return _save_fig(fig, filename)

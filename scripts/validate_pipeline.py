@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.skillra_pda import cleaning, config, io
+from src.skillra_pda import cleaning, config, features, io
 
 
 UNKNOWN_MARKERS = {"unknown", "Unknown", "UNKNOWN", ""}
@@ -31,6 +31,8 @@ def main() -> None:
         dtype_before = "missing"
         unwanted_before = 0
 
+    df_features = features.assemble_features(df.copy())
+
     try:
         io.save_processed(df, clean_path)
     except Exception as exc:  # pragma: no cover - script guard
@@ -47,11 +49,17 @@ def main() -> None:
         and unwanted_after == 0
     )
 
+    vacancy_age_ok = "vacancy_age_days" in df_features.columns
+    if vacancy_age_ok:
+        vacancy_age_ok = df_features["vacancy_age_days"].notna().any()
+
+    print(f"vacancy_age_days present: {vacancy_age_ok}")
+
     print(f"salary_gross dtype before save: {dtype_before}")
     print(f"salary_gross unknown markers before save: {unwanted_before}")
     print(f"salary_gross dtype after save: {dtype_after}")
     print(f"salary_gross unknown markers after save: {unwanted_after}")
-    print("OK" if ok else "FAIL: salary_gross is not clean boolean")
+    print("OK" if ok and vacancy_age_ok else "FAIL: pipeline invariants failed")
 
 
 if __name__ == "__main__":

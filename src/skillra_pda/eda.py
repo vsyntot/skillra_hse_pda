@@ -68,6 +68,69 @@ def junior_friendly_share(df: pd.DataFrame, flags: Iterable[str]) -> pd.Series:
     return df[usable].mean().sort_values(ascending=False)
 
 
+def salary_summary_by_grade_and_city(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped") -> pd.DataFrame:
+    """Median and quartiles of salary by grade and city tier."""
+
+    required = {"grade", "city_tier"}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(f"Ожидал колонки {missing} для salary_summary_by_grade_and_city")
+
+    summary = (
+        df.groupby(["grade", "city_tier"])[salary_col]
+        .agg(count="count", median="median", q1=lambda s: s.quantile(0.25), q3=lambda s: s.quantile(0.75))
+        .reset_index()
+    )
+    return summary
+
+
+def salary_summary_by_role_and_work_mode(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped") -> pd.DataFrame:
+    """Median salary by primary role and work mode."""
+
+    required = {"primary_role", "work_mode"}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(f"Ожидал колонки {missing} для salary_summary_by_role_and_work_mode")
+
+    return (
+        df.groupby(["primary_role", "work_mode"])[salary_col]
+        .median()
+        .reset_index()
+        .rename(columns={salary_col: "salary_median"})
+    )
+
+
+def remote_share_by_role(df: pd.DataFrame) -> pd.DataFrame:
+    """Share of remote positions per primary role."""
+
+    required = {"primary_role", "is_remote"}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(f"Ожидал колонки {missing} для remote_share_by_role")
+
+    pivot = df.groupby("primary_role")[["is_remote"]].mean().reset_index()
+    pivot = pivot.rename(columns={"is_remote": "remote_share"})
+    return pivot.sort_values(by="remote_share", ascending=False)
+
+
+def junior_friendly_share_by_segment(df: pd.DataFrame) -> pd.DataFrame:
+    """Share of junior-friendly flags by primary role and grade."""
+
+    flags = ["is_for_juniors", "allows_students", "has_mentoring", "has_test_task"]
+    missing_cols = [col for col in flags if col not in df.columns]
+    if missing_cols:
+        raise KeyError(
+            f"Ожидал колонки {missing_cols} для junior_friendly_share_by_segment"
+        )
+
+    group_cols = [col for col in ["primary_role", "grade"] if col in df.columns]
+    melted = df[group_cols + flags].melt(id_vars=group_cols, value_vars=flags, var_name="flag", value_name="value")
+    result = (
+        melted.groupby(group_cols + ["flag"])["value"].mean().reset_index().rename(columns={"value": "share"})
+    )
+    return result
+
+
 __all__ = [
     "missing_share",
     "describe_salary_by_group",
@@ -76,4 +139,8 @@ __all__ = [
     "top_value_counts",
     "skill_frequency",
     "junior_friendly_share",
+    "salary_summary_by_grade_and_city",
+    "salary_summary_by_role_and_work_mode",
+    "remote_share_by_role",
+    "junior_friendly_share_by_segment",
 ]

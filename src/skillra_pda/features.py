@@ -40,9 +40,38 @@ PRIMARY_ROLE_PRIORITY = [
     "role_analyst",
 ]
 
+# Skill group definitions guided by the feature dictionary
+CORE_DATA_SKILLS = [
+    "skill_sql",
+    "skill_excel",
+    "skill_powerbi",
+    "skill_tableau",
+    "has_python",
+    "skill_r",
+    "skill_clickhouse",
+    "skill_postgresql",
+    "skill_redash",
+]
+
+ML_STACK_SKILLS = [
+    "skill_sklearn",
+    "skill_pytorch",
+    "skill_tensorflow",
+    "skill_keras",
+    "skill_lightgbm",
+    "skill_xgboost",
+    "skill_catboost",
+    "skill_airflow",
+    "skill_dbt",
+    "skill_spark",
+    "skill_kafka",
+    "skill_hadoop",
+    "skill_mlflow",
+]
+
 
 def add_time_features(df: pd.DataFrame, date_col: str = "published_at_iso") -> pd.DataFrame:
-    """Add weekday/month/is_weekend flags from the publication date."""
+    """Add weekday/month/is_weekend flags from the publication date and vacancy age."""
     if date_col in df.columns:
         dt = pd.to_datetime(df[date_col], errors="coerce")
         df["published_weekday"] = dt.dt.weekday
@@ -53,6 +82,13 @@ def add_time_features(df: pd.DataFrame, date_col: str = "published_at_iso") -> p
         df["published_weekday"] = pd.NA
         df["published_month"] = pd.NA
         df["is_weekend_post"] = pd.NA
+
+    if "scraped_at_utc" in df.columns and date_col in df.columns:
+        scraped = pd.to_datetime(df["scraped_at_utc"], errors="coerce", utc=True).dt.tz_convert(None)
+        published = pd.to_datetime(df[date_col], errors="coerce", utc=True).dt.tz_convert(None)
+        df["vacancy_age_days"] = (scraped - published).dt.days
+    else:
+        df["vacancy_age_days"] = pd.NA
     return df
 
 
@@ -127,6 +163,36 @@ def add_boolean_counts(df: pd.DataFrame, groups: Dict[str, List[str]] | None = N
     return df
 
 
+def add_skill_stack_counts(
+    df: pd.DataFrame, groups: Dict[str, List[str]] | None = None
+) -> pd.DataFrame:
+    """Add counts for core data stack, ML stack, and total tech skills."""
+
+    if groups is None:
+        groups = detect_column_groups(df)
+
+    tech_cols = list(set(groups.get("skill_", [])) | set(groups.get("has_", [])))
+    existing_core = [col for col in CORE_DATA_SKILLS if col in df.columns]
+    existing_ml = [col for col in ML_STACK_SKILLS if col in df.columns]
+
+    if existing_core:
+        df["core_data_skills_count"] = df[existing_core].sum(axis=1)
+    else:
+        df["core_data_skills_count"] = 0
+
+    if existing_ml:
+        df["ml_stack_count"] = df[existing_ml].sum(axis=1)
+    else:
+        df["ml_stack_count"] = 0
+
+    if tech_cols:
+        df["tech_stack_size"] = df[tech_cols].sum(axis=1)
+    else:
+        df["tech_stack_size"] = 0
+
+    return df
+
+
 def add_primary_role(df: pd.DataFrame, role_prefix: str = "role_") -> pd.DataFrame:
     """Collapse multiple role flags into a single prioritized primary role."""
     role_cols = [col for col in df.columns if col.startswith(role_prefix)]
@@ -162,13 +228,31 @@ def add_salary_bucket(
     return df
 
 
-def add_text_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Add simple text-based proxy features."""
-    text_cols = [col for col in df.columns if df[col].dtype == "object"]
-    for col in text_cols:
-        cleaned = df[col].fillna("")
-        df[f"{col}_len"] = cleaned.str.len()
-        df[f"{col}_words"] = cleaned.str.split().str.len()
+def add_structured_text_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Add focused text features for descriptions and requirement sections."""
+
+    def count_keywords(text: str, keywords: List[str]) -> int:
+        lowered = text.lower()
+        return sum(lowered.count(kw) for kw in keywords)
+
+    if "description" in df.columns:
+        desc = df["description"].fillna("")
+        df["description_len_chars"] = desc.str.len()
+        df["description_len_words"] = desc.str.split().str.len()
+        bullet_like = desc.str.count(r"[-•▪·]")
+        # Use keyword anchors to approximate section sizes when explicit columns are absent.
+        req_keywords = ["требован", "необходимо", "опыт"]
+        resp_keywords = ["обязан", "что предстоит", "функции"]
+        plus_keywords = ["плюсом", "желательно", "будет плюсом"]
+
+        if "requirements_count" not in df.columns:
+            df["requirements_count"] = desc.apply(lambda x: count_keywords(x, req_keywords)) + bullet_like
+        if "responsibilities_count" not in df.columns:
+            df["responsibilities_count"] = desc.apply(lambda x: count_keywords(x, resp_keywords)) + bullet_like
+        if "optional_skills_count" not in df.columns:
+            df["optional_skills_count"] = desc.apply(lambda x: count_keywords(x, plus_keywords))
+        if "must_have_skills_count" not in df.columns:
+            df["must_have_skills_count"] = desc.apply(lambda x: count_keywords(x, req_keywords))
     return df
 
 
@@ -213,6 +297,13 @@ def ensure_expected_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
         "work_mode": "unknown",
         "primary_role": "other",
         "salary_bucket": pd.NA,
+        "vacancy_age_days": pd.NA,
+        "core_data_skills_count": 0,
+        "ml_stack_count": 0,
+        "tech_stack_size": 0,
+        "benefits_count": 0,
+        "soft_skills_count": 0,
+        "role_count": 0,
     }
     for col, default in expected_defaults.items():
         if col not in df.columns:
@@ -227,7 +318,8 @@ def assemble_features(df: pd.DataFrame) -> pd.DataFrame:
     df = add_city_tier(df)
     df = add_work_mode(df)
     df = add_boolean_counts(df, groups=grouped)
+    df = add_skill_stack_counts(df, groups=grouped)
     df = add_primary_role(df)
     df = add_salary_bucket(df)
-    df = add_text_features(df)
+    df = add_structured_text_features(df)
     return ensure_expected_feature_columns(df)

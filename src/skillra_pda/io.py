@@ -31,6 +31,45 @@ def load_raw(path: PathLike) -> pd.DataFrame:
     return pd.read_csv(csv_path, low_memory=False)
 
 
+def _coerce_boollike_object_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Sanitize nearly-boolean object columns before persistence."""
+
+    allowed = {
+        True,
+        False,
+        1,
+        0,
+        "1",
+        "0",
+        "true",
+        "false",
+        "True",
+        "False",
+        "unknown",
+        "Unknown",
+        "UNKNOWN",
+        "",
+    }
+
+    for col in df.columns:
+        if str(df[col].dtype) != "object":
+            continue
+
+        uniques = set(df[col].dropna().unique().tolist())
+        if not uniques:
+            continue
+        if not uniques.issubset(allowed):
+            continue
+
+        coerced, did_cast = coerce_bool_like_series(
+            df[col], null_markers=BOOL_NULL_MARKERS, force=True
+        )
+        if did_cast:
+            df[col] = coerced
+
+    return df
+
+
 def save_processed(df: pd.DataFrame, path: PathLike) -> None:
     """Save a processed dataframe to CSV or Parquet.
 
@@ -47,16 +86,7 @@ def save_processed(df: pd.DataFrame, path: PathLike) -> None:
     )
 
     df_to_save = ensure_salary_gross_boolean(df_to_save)
-
-    for col in df_to_save.columns:
-        dtype_str = str(df_to_save[col].dtype)
-        if dtype_str in {"object", "string", "bool"} or dtype_str.startswith("category"):
-            if is_boolean_like_series(df_to_save[col], null_markers=BOOL_NULL_MARKERS):
-                coerced, did_cast = coerce_bool_like_series(
-                    df_to_save[col], null_markers=BOOL_NULL_MARKERS, force=True
-                )
-                if did_cast:
-                    df_to_save[col] = coerced
+    df_to_save = _coerce_boollike_object_columns(df_to_save)
 
     if output_path.suffix.lower() == ".parquet":
         df_to_save.to_parquet(output_path, index=False)
