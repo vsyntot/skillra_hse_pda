@@ -7,9 +7,9 @@ import numpy as np
 import pandas as pd
 
 PREFIX_GROUPS = ["has_", "skill_", "benefit_", "soft_", "domain_", "role_"]
-BOOL_NULL_MARKERS = {"unknown", "Unknown", "UNKNOWN", ""}
-BOOL_TRUE_MARKERS = {True, 1, "1", "true", "True"}
-BOOL_FALSE_MARKERS = {False, 0, "0", "false", "False"}
+BOOL_NULL_MARKERS = {"unknown", "", "n/a", "nan"}
+BOOL_TRUE_MARKERS = {True, 1, "1", "true", "yes"}
+BOOL_FALSE_MARKERS = {False, 0, "0", "false", "no"}
 BOOLEAN_MARKERS = BOOL_TRUE_MARKERS | BOOL_FALSE_MARKERS | BOOL_NULL_MARKERS
 
 
@@ -35,9 +35,9 @@ def _normalize_bool_like(value, null_lower: set) -> object:
         lowered = stripped.lower()
         if lowered in null_lower:
             return pd.NA
-        if lowered in {"true", "1"}:
+        if lowered in {"true", "1", "yes"}:
             return True
-        if lowered in {"false", "0"}:
+        if lowered in {"false", "0", "no"}:
             return False
 
     return None
@@ -99,6 +99,111 @@ def is_boolean_like_series(series: pd.Series, null_markers: Iterable[str] | None
         if normalized is None:
             return False
     return True
+
+
+def _drop_mostly_missing_columns(
+    df: pd.DataFrame, threshold: float = 0.95
+) -> Tuple[pd.DataFrame, List[str]]:
+    """Drop columns whose missingness exceeds the threshold."""
+
+    missing_share = df.isna().mean()
+    to_drop = missing_share[missing_share >= threshold].index.tolist()
+    if to_drop:
+        df = df.drop(columns=to_drop)
+    return df, to_drop
+
+
+def _coerce_boolean_like_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
+    """Coerce boolean-like columns (including salary_gross and prefixed bools)."""
+
+    bool_like_cols: List[str] = []
+    allowed_values = BOOLEAN_MARKERS | {True, False, 0, 1}
+    replace_map = {
+        "true": True,
+        "1": True,
+        "yes": True,
+        "false": False,
+        "0": False,
+        "no": False,
+        "unknown": pd.NA,
+        "": pd.NA,
+        "n/a": pd.NA,
+        "nan": pd.NA,
+    }
+
+    for col in df.columns:
+        series = df[col]
+        dtype_str = str(series.dtype)
+        prefix_candidate = any(col.startswith(prefix) for prefix in PREFIX_GROUPS)
+        force = prefix_candidate or col == "salary_gross" or dtype_str in {"bool", "boolean"}
+
+        uniques = series.dropna().unique()
+        normalized_uniques = set()
+        for val in uniques:
+            if isinstance(val, str):
+                normalized_uniques.add(val.strip().lower())
+            else:
+                normalized_uniques.add(val)
+
+        subset_bool_like = all(u in allowed_values for u in normalized_uniques) or not normalized_uniques
+        if not (subset_bool_like or force):
+            continue
+
+        def _convert(val: object) -> object:
+            if pd.isna(val):
+                return pd.NA
+            if isinstance(val, bool):
+                return val
+            if isinstance(val, (int, np.integer)) and val in (0, 1):
+                return bool(val)
+            if isinstance(val, str):
+                lowered = val.strip().lower()
+                if lowered in replace_map:
+                    return replace_map[lowered]
+            return pd.NA if force else None
+
+        coerced = series.map(_convert)
+        if coerced.isna().any() and not force and not subset_bool_like:
+            continue
+
+        df[col] = coerced.astype("boolean")
+        bool_like_cols.append(col)
+
+    return df, bool_like_cols
+
+
+def _fill_categorical_missing(
+    df: pd.DataFrame, exclude: Iterable[str] | None = None
+) -> Tuple[pd.DataFrame, List[str]]:
+    """Fill missing values in categorical/object columns with 'unknown'."""
+
+    exclude_set = set(exclude or [])
+    filled_cols: List[str] = []
+
+    for col in df.columns:
+        if col in exclude_set:
+            continue
+        dtype_str = str(df[col].dtype)
+        if dtype_str != "object" and not dtype_str.startswith("category"):
+            continue
+        df[col] = df[col].fillna("unknown")
+        if dtype_str == "object" and df[col].str.len().max() > 100:
+            df[col] = df[col].replace("unknown", "").fillna("")
+        filled_cols.append(col)
+
+    return df, filled_cols
+
+
+def _fill_numeric_missing(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
+    """Fill missing numeric columns with median values."""
+
+    filled_cols: List[str] = []
+    numeric_cols = df.select_dtypes(include=["number"]).columns
+    for col in numeric_cols:
+        if df[col].isna().any():
+            df[col] = df[col].fillna(df[col].median())
+            filled_cols.append(col)
+    return df, filled_cols
 
 
 def normalize_boolean_columns(
@@ -182,42 +287,25 @@ def parse_dates(df: pd.DataFrame) -> pd.DataFrame:
     for col in date_cols:
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce")
+    if "published_at_iso" in df.columns and "scraped_at_utc" in df.columns:
+        df["vacancy_age_days"] = (df["scraped_at_utc"] - df["published_at_iso"]).dt.days
     return df
 
 
 def handle_missingness(df: pd.DataFrame, drop_threshold: float = 0.95) -> pd.DataFrame:
-    """Handle missing values with simple heuristics."""
-    col_missing = df.isna().mean()
-    to_drop = col_missing[col_missing >= drop_threshold].index
-    if len(to_drop) > 0:
-        df = df.drop(columns=list(to_drop))
-        df.attrs["dropped_columns"] = list(to_drop)
+    """Handle missing values using declarative sub-steps."""
 
-    df, boolean_cols = normalize_boolean_columns(df, force_columns={"salary_gross"})
+    df = df.copy()
 
-    # Ensure salary_gross is firmly cast even if upstream contamination sneaks in.
-    df = ensure_salary_gross_boolean(df)
-    if "salary_gross" in df.columns and "salary_gross" not in boolean_cols:
-        boolean_cols.append("salary_gross")
+    df, dropped_cols = _drop_mostly_missing_columns(df, threshold=drop_threshold)
+    df, bool_like_cols = _coerce_boolean_like_columns(df)
+    df, filled_categorical_cols = _fill_categorical_missing(df, exclude=bool_like_cols)
+    df, filled_numeric_cols = _fill_numeric_missing(df)
 
-    categorical_cols = [
-        col
-        for col in df.columns
-        if (df[col].dtype == "object" or str(df[col].dtype).startswith("category"))
-        and col not in boolean_cols
-    ]
-    for col in categorical_cols:
-        df[col] = df[col].fillna("unknown")
-
-    text_cols = [col for col in categorical_cols if df[col].str.len().max() > 100]
-    for col in text_cols:
-        df[col] = df[col].replace("unknown", "").fillna("")
-
-    numeric_cols = df.select_dtypes(include=["number"]).columns
-    for col in numeric_cols:
-        if df[col].isna().any():
-            median = df[col].median()
-            df[col] = df[col].fillna(median)
+    df.attrs["dropped_cols"] = dropped_cols
+    df.attrs["bool_like_cols"] = bool_like_cols
+    df.attrs["filled_categorical_cols"] = filled_categorical_cols
+    df.attrs["filled_numeric_cols"] = filled_numeric_cols
 
     return df
 
@@ -233,8 +321,12 @@ def ensure_salary_gross_boolean(df: pd.DataFrame) -> pd.DataFrame:
         "Unknown": pd.NA,
         "UNKNOWN": pd.NA,
         "": pd.NA,
+        "n/a": pd.NA,
+        "nan": pd.NA,
         "true": True,
         "false": False,
+        "yes": True,
+        "no": False,
         "True": True,
         "False": False,
         "1": True,

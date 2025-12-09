@@ -4,13 +4,7 @@ from typing import Union
 
 import pandas as pd
 
-from .cleaning import (
-    BOOL_NULL_MARKERS,
-    coerce_bool_like_series,
-    ensure_salary_gross_boolean,
-    is_boolean_like_series,
-    normalize_boolean_columns,
-)
+from .cleaning import BOOLEAN_MARKERS, ensure_salary_gross_boolean
 
 PathLike = Union[str, Path]
 
@@ -34,38 +28,48 @@ def load_raw(path: PathLike) -> pd.DataFrame:
 def _coerce_boollike_object_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Sanitize nearly-boolean object columns before persistence."""
 
-    allowed = {
-        True,
-        False,
-        1,
-        0,
-        "1",
-        "0",
-        "true",
-        "false",
-        "True",
-        "False",
-        "unknown",
-        "Unknown",
-        "UNKNOWN",
-        "",
+    allowed = BOOLEAN_MARKERS | {True, False, 0, 1, "true", "false", "yes", "no"}
+    replace_map = {
+        "true": True,
+        "false": False,
+        "yes": True,
+        "no": False,
+        "1": True,
+        "0": False,
+        "unknown": pd.NA,
+        "": pd.NA,
+        "n/a": pd.NA,
+        "nan": pd.NA,
     }
 
     for col in df.columns:
-        if str(df[col].dtype) != "object":
+        series = df[col]
+        dtype_str = str(series.dtype)
+        if dtype_str == "bool":
+            df[col] = series.astype("boolean")
+            continue
+        if dtype_str != "object":
             continue
 
-        uniques = set(df[col].dropna().unique().tolist())
-        if not uniques:
-            continue
-        if not uniques.issubset(allowed):
+        uniques = set(series.dropna().unique().tolist())
+        normalized = {u.strip().lower() if isinstance(u, str) else u for u in uniques}
+        if normalized and not normalized.issubset(allowed):
             continue
 
-        coerced, did_cast = coerce_bool_like_series(
-            df[col], null_markers=BOOL_NULL_MARKERS, force=True
-        )
-        if did_cast:
-            df[col] = coerced
+        def _convert(val: object) -> object:
+            if pd.isna(val):
+                return pd.NA
+            if isinstance(val, bool):
+                return val
+            if isinstance(val, (int, float)) and val in (0, 1):
+                return bool(val)
+            if isinstance(val, str):
+                lowered = val.strip().lower()
+                if lowered in replace_map:
+                    return replace_map[lowered]
+            return pd.NA
+
+        df[col] = series.map(_convert).astype("boolean")
 
     return df
 
@@ -79,13 +83,7 @@ def save_processed(df: pd.DataFrame, path: PathLike) -> None:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    df_to_save = df.copy()
-
-    df_to_save, _boolean_cols = normalize_boolean_columns(
-        df_to_save, null_markers=BOOL_NULL_MARKERS, force_columns={"salary_gross"}
-    )
-
-    df_to_save = ensure_salary_gross_boolean(df_to_save)
+    df_to_save = ensure_salary_gross_boolean(df.copy())
     df_to_save = _coerce_boollike_object_columns(df_to_save)
 
     if output_path.suffix.lower() == ".parquet":
