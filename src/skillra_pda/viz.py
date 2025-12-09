@@ -164,7 +164,7 @@ def salary_mean_and_count_bar(
     ax1.bar(top.index, top["median"], color="steelblue")
     ax1.set_ylabel("Median salary (RUB)")
     ax1.set_xlabel(category_col)
-    ax1.tick_params(axis="x", rotation=45, ha="right")
+    ax1.tick_params(axis="x", rotation=45)
 
     ax2 = ax1.twinx()
     ax2.plot(top.index, top["count"], color="darkorange", marker="o")

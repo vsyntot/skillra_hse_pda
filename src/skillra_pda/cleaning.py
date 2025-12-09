@@ -286,9 +286,14 @@ def parse_dates(df: pd.DataFrame) -> pd.DataFrame:
     date_cols = ["published_at_iso", "scraped_at_utc"]
     for col in date_cols:
         if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors="coerce")
+            # align on UTC to avoid tz-naive/aware subtraction issues
+            df[col] = pd.to_datetime(df[col], errors="coerce", utc=True)
+
     if "published_at_iso" in df.columns and "scraped_at_utc" in df.columns:
         df["vacancy_age_days"] = (df["scraped_at_utc"] - df["published_at_iso"]).dt.days
+        # store tz-naive versions for downstream use
+        df["published_at_iso"] = df["published_at_iso"].dt.tz_convert(None)
+        df["scraped_at_utc"] = df["scraped_at_utc"].dt.tz_convert(None)
     return df
 
 

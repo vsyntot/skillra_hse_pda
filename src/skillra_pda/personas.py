@@ -10,6 +10,8 @@ import pandas as pd
 
 @dataclass
 class Persona:
+    """Persona definition for skill-gap analysis."""
+
     name: str
     description: str
     current_skills: List[str]
