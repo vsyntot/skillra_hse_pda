@@ -1,24 +1,25 @@
+# Environments
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Python artifacts
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
 *.so
-
-# Virtual environments
-.env
-.venv
-env/
-venv/
-ENV/
-
-# IDE settings
-.idea/
-.vscode/
-*.iml
-
-# Python tooling caches
+*.egg-info/
+.eggs/
+build/
+dist/
+*.spec
+.cache/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+
+# Notebook and IDE
 .ipynb_checkpoints/
 .pyre/
 .dmypy.json
@@ -29,9 +30,15 @@ data/
 
 # OS files
 .DS_Store
-Thumbs.db
+.idea/
+.vscode/
 
-# Processed data and reports
+# Coverage and reports
+.coverage
+htmlcov/
+reports/figures/
+reports/tables/
+
+# Data outputs
 data/processed/
-reports/figures/*.png
-reports/tables/*.csv
+data/interim/
