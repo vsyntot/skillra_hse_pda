@@ -12,18 +12,31 @@ from .cleaning import detect_column_groups
 CITY_MILLION_PLUS = {
     "novosibirsk",
     "yekaterinburg",
+    "ekaterinburg",
     "nizhny novgorod",
+    "нижний новгород",
+    "nn",
     "kazan",
+    "казань",
     "chelyabinsk",
+    "челябинск",
     "samara",
+    "самара",
     "omsk",
+    "омск",
     "rostov-on-don",
     "rostov-na-donu",
+    "ростов-на-дону",
     "ufa",
+    "уфа",
     "krasnoyarsk",
+    "красноярск",
     "perm",
+    "пермь",
     "voronezh",
+    "воронеж",
     "volgograd",
+    "волгоград",
 }
 
 PRIMARY_ROLE_PRIORITY = [
@@ -46,27 +59,19 @@ CORE_DATA_SKILLS = [
     "skill_excel",
     "skill_powerbi",
     "skill_tableau",
-    "has_python",
     "skill_r",
+    "has_python",
     "skill_clickhouse",
-    "skill_postgresql",
-    "skill_redash",
+    "skill_bigquery",
 ]
 
 ML_STACK_SKILLS = [
-    "skill_sklearn",
-    "skill_pytorch",
-    "skill_tensorflow",
-    "skill_keras",
-    "skill_lightgbm",
-    "skill_xgboost",
-    "skill_catboost",
-    "skill_airflow",
-    "skill_dbt",
-    "skill_spark",
-    "skill_kafka",
-    "skill_hadoop",
-    "skill_mlflow",
+    "has_sklearn",
+    "has_pytorch",
+    "has_tensorflow",
+    "has_airflow",
+    "has_spark",
+    "has_kafka",
 ]
 
 
@@ -117,29 +122,45 @@ def add_city_tier(df: pd.DataFrame, city_col: str = "city") -> pd.DataFrame:
 
 
 def add_work_mode(df: pd.DataFrame) -> pd.DataFrame:
-    """Create normalized work mode based on remote/hybrid flags."""
-    remote = df.get("is_remote")
-    hybrid = df.get("is_hybrid")
-    work_format = df.get("work_format")
+    """Create normalized work mode prioritizing explicit work_format, then remote/hybrid flags."""
 
-    def decide(row):
+    def decide(row: dict) -> str:
+        work_format = row.get("work_format")
+        if isinstance(work_format, str) and work_format in {"remote", "hybrid", "office", "field"}:
+            return work_format
         if bool(row.get("is_remote")):
             return "remote"
         if bool(row.get("is_hybrid")):
             return "hybrid"
-        if row.get("work_format") == "office":
-            return "office"
         return "unknown"
 
     df = df.copy()
     df["work_mode"] = [
-        decide({
-            "is_remote": remote.iloc[i] if remote is not None else None,
-            "is_hybrid": hybrid.iloc[i] if hybrid is not None else None,
-            "work_format": work_format.iloc[i] if work_format is not None else None,
-        })
+        decide(
+            {
+                "is_remote": df.get("is_remote").iloc[i] if "is_remote" in df else None,
+                "is_hybrid": df.get("is_hybrid").iloc[i] if "is_hybrid" in df else None,
+                "work_format": df.get("work_format").iloc[i] if "work_format" in df else None,
+            }
+        )
         for i in range(len(df))
     ]
+    return df
+
+
+def add_experience_flags(df: pd.DataFrame) -> pd.DataFrame:
+    """Mark junior-friendly vacancies and their complement (battle experience)."""
+
+    df = df.copy()
+    junior_flags = [
+        df[col].fillna(False)
+        for col in ["is_for_juniors", "allows_students", "exp_is_no_experience"]
+        if col in df.columns
+    ]
+
+    if junior_flags:
+        df["is_junior_friendly"] = pd.concat(junior_flags, axis=1).any(axis=1).astype("boolean")
+        df["battle_experience"] = (~df["is_junior_friendly"].fillna(False)).astype("boolean")
     return df
 
 
@@ -163,34 +184,36 @@ def add_boolean_counts(df: pd.DataFrame, groups: Dict[str, List[str]] | None = N
     return df
 
 
-def add_skill_stack_counts(
-    df: pd.DataFrame, groups: Dict[str, List[str]] | None = None
-) -> pd.DataFrame:
-    """Add counts for core data stack, ML stack, and total tech skills."""
+def add_stack_aggregates(df: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate core data, ML stack, and overall tech stack sizes."""
 
-    if groups is None:
-        groups = detect_column_groups(df)
+    df = df.copy()
 
-    tech_cols = list(set(groups.get("skill_", [])) | set(groups.get("has_", [])))
+    def _count_true(columns: List[str]) -> pd.Series:
+        if not columns:
+            return pd.Series(0, index=df.index)
+        return (
+            df[columns]
+            .fillna(False)
+            .astype(bool)
+            .astype(int)
+            .sum(axis=1)
+        )
+
     existing_core = [col for col in CORE_DATA_SKILLS if col in df.columns]
     existing_ml = [col for col in ML_STACK_SKILLS if col in df.columns]
+    tech_cols = [col for col in df.columns if col.startswith("has_") or col.startswith("skill_")]
 
-    if existing_core:
-        df["core_data_skills_count"] = df[existing_core].sum(axis=1)
-    else:
-        df["core_data_skills_count"] = 0
-
-    if existing_ml:
-        df["ml_stack_count"] = df[existing_ml].sum(axis=1)
-    else:
-        df["ml_stack_count"] = 0
-
-    if tech_cols:
-        df["tech_stack_size"] = df[tech_cols].sum(axis=1)
-    else:
-        df["tech_stack_size"] = 0
-
+    df["core_data_skills_count"] = _count_true(existing_core)
+    df["ml_stack_count"] = _count_true(existing_ml)
+    df["tech_stack_size"] = _count_true(tech_cols)
     return df
+
+
+def add_skill_stack_counts(df: pd.DataFrame, groups: Dict[str, List[str]] | None = None) -> pd.DataFrame:
+    """Backward-compatible wrapper for stack aggregates."""
+
+    return add_stack_aggregates(df)
 
 
 def add_primary_role(df: pd.DataFrame, role_prefix: str = "role_") -> pd.DataFrame:
@@ -229,30 +252,22 @@ def add_salary_bucket(
 
 
 def add_structured_text_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Add focused text features for descriptions and requirement sections."""
+    """Add targeted text features focused on the main description field."""
 
-    def count_keywords(text: str, keywords: List[str]) -> int:
-        lowered = text.lower()
-        return sum(lowered.count(kw) for kw in keywords)
-
+    df = df.copy()
     if "description" in df.columns:
         desc = df["description"].fillna("")
         df["description_len_chars"] = desc.str.len()
         df["description_len_words"] = desc.str.split().str.len()
-        bullet_like = desc.str.count(r"[-•▪·]")
-        # Use keyword anchors to approximate section sizes when explicit columns are absent.
-        req_keywords = ["требован", "необходимо", "опыт"]
-        resp_keywords = ["обязан", "что предстоит", "функции"]
-        plus_keywords = ["плюсом", "желательно", "будет плюсом"]
 
-        if "requirements_count" not in df.columns:
-            df["requirements_count"] = desc.apply(lambda x: count_keywords(x, req_keywords)) + bullet_like
-        if "responsibilities_count" not in df.columns:
-            df["responsibilities_count"] = desc.apply(lambda x: count_keywords(x, resp_keywords)) + bullet_like
-        if "optional_skills_count" not in df.columns:
-            df["optional_skills_count"] = desc.apply(lambda x: count_keywords(x, plus_keywords))
-        if "must_have_skills_count" not in df.columns:
-            df["must_have_skills_count"] = desc.apply(lambda x: count_keywords(x, req_keywords))
+    for col, target in [
+        ("requirements", "requirements_count"),
+        ("responsibilities", "responsibilities_count"),
+        ("must_have_skills", "must_have_skills_count"),
+        ("optional_skills", "optional_skills_count"),
+    ]:
+        if col in df.columns:
+            df[target] = df[col].fillna("").str.split().str.len()
     return df
 
 
@@ -267,7 +282,7 @@ def compute_skill_premium(
     for col in skill_cols:
         if col not in df.columns:
             continue
-        has_skill = df[col] == 1
+        has_skill = df[col].fillna(False).astype(bool)
         count_with_skill = int(has_skill.sum())
         if count_with_skill < min_count:
             continue
@@ -304,6 +319,8 @@ def ensure_expected_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
         "benefits_count": 0,
         "soft_skills_count": 0,
         "role_count": 0,
+        "is_junior_friendly": pd.NA,
+        "battle_experience": pd.NA,
     }
     for col, default in expected_defaults.items():
         if col not in df.columns:
@@ -318,7 +335,8 @@ def assemble_features(df: pd.DataFrame) -> pd.DataFrame:
     df = add_city_tier(df)
     df = add_work_mode(df)
     df = add_boolean_counts(df, groups=grouped)
-    df = add_skill_stack_counts(df, groups=grouped)
+    df = add_stack_aggregates(df)
+    df = add_experience_flags(df)
     df = add_primary_role(df)
     df = add_salary_bucket(df)
     df = add_structured_text_features(df)

@@ -1,5 +1,7 @@
 # CODEx_DIFF_PLAN.md — финальный апгрейд Skillra HSE PDA
 
+Repo: `vsyntot/skillra_hse_pda`
+
 Контекст:
 - ТЗ курса «Python для анализа данных» (этапы 0–4, структура ноутбука, визуализации, текстовые выводы).
 - Продуктовый план **Career & Job Market Navigator — Skillra** (MVP до конца семестра).
