@@ -1,8 +1,36 @@
+# Environments
 .venv/
+venv/
+env/
+.env
+.env.*
+
+# Python artifacts
 __pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+*.spec
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Notebook and IDE
 .ipynb_checkpoints/
 .DS_Store
-.env
+.idea/
+.vscode/
+
+# Coverage and reports
+.coverage
+htmlcov/
+reports/figures/
+reports/tables/
+
+# Data outputs
 data/processed/
-reports/figures/*.png
-reports/tables/*.csv
+data/interim/
