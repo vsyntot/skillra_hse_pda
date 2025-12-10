@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-from .eda import build_skill_demand_profile
+from .eda import build_skill_demand_profile as _base_skill_profile
 
 
 @dataclass
@@ -54,6 +54,65 @@ def _filter_by_target(
     return filtered
 
 
+def build_skill_demand_profile(
+    df_features: pd.DataFrame,
+    role: str | None,
+    grade: str | None,
+    role_col: str = "primary_role",
+    grade_col: str = "grade",
+    skill_cols: list[str] | None = None,
+    skill_prefixes: tuple[str, ...] = ("skill_", "has_", "soft_"),
+) -> pd.DataFrame:
+    """Compute per-skill market share for the specified segment."""
+
+    filtered = df_features.copy()
+    if role and role_col in filtered.columns:
+        filtered = filtered[
+            filtered[role_col].fillna("").str.lower() == role.strip().lower()
+        ]
+    if grade and grade_col in filtered.columns:
+        filtered = filtered[
+            filtered[grade_col].fillna("").str.lower() == grade.strip().lower()
+        ]
+
+    if skill_cols is None:
+        skill_cols = [col for col in filtered.columns if col.startswith(skill_prefixes)]
+    else:
+        skill_cols = [col for col in skill_cols if col in filtered.columns]
+
+    if filtered.empty or not skill_cols:
+        return pd.DataFrame(columns=["skill", "market_share", "count"])
+
+    skills_bool = filtered[skill_cols].fillna(False).astype(bool)
+    share = skills_bool.mean()
+    count = skills_bool.sum()
+
+    profile = (
+        pd.DataFrame(
+            {
+                "skill": share.index,
+                "market_share": share.values,
+                "count": count.values,
+            }
+        )
+        .sort_values(by=["market_share", "count"], ascending=False)
+        .reset_index(drop=True)
+    )
+
+    if profile.empty and (role or grade):
+        # Fallback to the base implementation in case columns were missing upstream
+        return _base_skill_profile(
+            df_features,
+            role=role,
+            grade=grade,
+            role_col=role_col,
+            grade_col=grade_col,
+            skill_cols=skill_cols,
+        )
+
+    return profile
+
+
 def skill_gap_for_persona(
     df_features: pd.DataFrame,
     persona: Persona,
@@ -73,14 +132,16 @@ def skill_gap_for_persona(
     Returns columns: skill_name, market_share, persona_has (0/1), gap (bool).
     """
 
-    df_filtered = _filter_by_target(df_features, persona, role_col=role_col, grade_col=grade_col)
+    df_filtered = _filter_by_target(
+        df_features, persona, role_col=role_col, grade_col=grade_col
+    )
     if df_filtered.empty:
         return pd.DataFrame(columns=["skill_name", "market_share", "persona_has", "gap"])
 
     demand_profile = build_skill_demand_profile(
         df_filtered,
-        role=None,
-        grade=None,
+        role=persona.target_role,
+        grade=persona.target_grade,
         role_col=role_col,
         grade_col=grade_col,
         skill_cols=skill_cols,
@@ -134,7 +195,7 @@ def plot_persona_skill_gap(gap_df: pd.DataFrame, persona: Persona, output_dir: P
 # Predefined personas for quick exploration in notebooks
 DATA_STUDENT_JUNIOR_DA_DS = Persona(
     name="Data student → Junior DA/DS",
-    current_skills=["skill_sql", "skill_excel", "has_python", "skill_tableau"],
+    current_skills=["has_python", "skill_sql", "skill_excel", "skill_tableau"],
     target_role="data analyst",
     target_grade="junior",
     constraints={"work_mode": ["remote", "hybrid"], "city_tier": ["Moscow", "SPb"]},
@@ -145,7 +206,7 @@ CAREER_SWITCHER_BI_ANALYST = Persona(
     current_skills=["skill_powerbi", "skill_sql", "skill_excel", "skill_tableau"],
     target_role="product analyst",
     target_grade="middle",
-    constraints={"work_mode": ["hybrid", "office"], "city_tier": ["Moscow", "Million+"]},
+    constraints={"work_mode": ["hybrid", "office"], "city_tier": ["Moscow", "Million+"], "remote_only": False},
 )
 
 MID_DATA_ANALYST = Persona(
@@ -156,18 +217,39 @@ MID_DATA_ANALYST = Persona(
     constraints={"work_mode": ["remote", "hybrid", "office"], "city_tier": ["Moscow", "SPb", "Million+", "Other RU"]},
 )
 
+REGIONAL_REMOTE_DA = Persona(
+    name="Regional analyst → remote data role",
+    current_skills=["skill_sql", "skill_excel", "has_python"],
+    target_role="data analyst",
+    target_grade="junior",
+    constraints={"work_mode": ["remote"], "city_tier": ["Other RU", "Million+"], "remote_only": True},
+)
+
+PRODUCT_ANALYST_GROWTH = Persona(
+    name="Product analyst aiming for growth",
+    current_skills=["skill_sql", "skill_excel", "skill_powerbi", "has_python"],
+    target_role="product analyst",
+    target_grade="middle",
+    constraints={"work_mode": ["hybrid", "office"], "city_tier": ["Moscow", "SPb"]},
+)
+
 PERSONAS = [
     DATA_STUDENT_JUNIOR_DA_DS,
     CAREER_SWITCHER_BI_ANALYST,
     MID_DATA_ANALYST,
+    REGIONAL_REMOTE_DA,
+    PRODUCT_ANALYST_GROWTH,
 ]
 
 __all__ = [
     "Persona",
+    "build_skill_demand_profile",
     "skill_gap_for_persona",
     "plot_persona_skill_gap",
     "DATA_STUDENT_JUNIOR_DA_DS",
     "CAREER_SWITCHER_BI_ANALYST",
     "MID_DATA_ANALYST",
+    "REGIONAL_REMOTE_DA",
+    "PRODUCT_ANALYST_GROWTH",
     "PERSONAS",
 ]
