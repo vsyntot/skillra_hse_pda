@@ -87,6 +87,68 @@ def salary_by_english_level(df: pd.DataFrame, salary_col: str = "salary_mid_rub_
     return salary_summary_by_category(df, "lang_english_level", salary_col)
 
 
+def _normalize_english_level(level: str | None, required: bool | None) -> str:
+    """Map raw English requirement markers to a standard bucket."""
+
+    if required is False:
+        return "no_english"
+
+    if not level or pd.isna(level):
+        return "no_english"
+
+    level_normalized = str(level).strip().lower()
+    mapping = {
+        "none": "no_english",
+        "basic": "A2",
+        "a2": "A2",
+        "elementary": "A2",
+        "pre-intermediate": "A2",
+        "intermediate": "B1",
+        "b1": "B1",
+        "upper_intermediate": "B2",
+        "upper-intermediate": "B2",
+        "b2": "B2",
+        "advanced": "C1_plus",
+        "fluent": "C1_plus",
+        "c1": "C1_plus",
+        "c2": "C1_plus",
+        "native": "C1_plus",
+        "proficient": "C1_plus",
+    }
+
+    return mapping.get(level_normalized, "no_english")
+
+
+def english_requirement_stats(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped") -> pd.DataFrame:
+    """Bucket English requirements and summarize vacancy counts/share/salary."""
+
+    lang_cols = [col for col in df.columns if col.startswith("lang_")]
+    if not lang_cols:
+        raise KeyError("english_requirement_stats: expected lang_* columns")
+    if salary_col not in df.columns:
+        raise KeyError(f"english_requirement_stats: expected column {salary_col}")
+
+    required = df.get("lang_english_required")
+    level = df.get("lang_english_level")
+    temp = df.copy()
+    temp["english_level"] = [
+        _normalize_english_level(lvl, req)
+        for lvl, req in zip(
+            level if level is not None else [None] * len(df),
+            required if required is not None else [None] * len(df),
+        )
+    ]
+
+    grouped = (
+        temp.groupby("english_level")[salary_col]
+        .agg(vacancy_count="count", salary_median="median")
+        .reset_index()
+    )
+    total = len(temp)
+    grouped["share"] = grouped["vacancy_count"] / total if total else 0
+    return grouped.sort_values(by="vacancy_count", ascending=False)
+
+
 def salary_by_stack_size(
     df: pd.DataFrame,
     salary_col: str = "salary_mid_rub_capped",
@@ -368,6 +430,56 @@ def junior_friendly_share_by_segment(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def _normalize_education_level(level: str | None, required: bool | None, technical: bool | None) -> str:
+    """Map education markers to coarse buckets."""
+
+    if level:
+        level = str(level).strip().lower()
+
+    if level == "master_or_higher":
+        return "master_phd"
+
+    if technical:
+        return "technical_only"
+
+    if required or level in {"any_he", "bachelor_or_higher", "partial_higher"}:
+        return "any_degree"
+
+    return "no_degree_required"
+
+
+def education_requirement_stats(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped") -> pd.DataFrame:
+    """Bucket education requirements with counts, share and salary medians."""
+
+    edu_cols = [col for col in df.columns if col.startswith("edu_")]
+    if not edu_cols:
+        raise KeyError("education_requirement_stats: expected edu_* columns")
+    if salary_col not in df.columns:
+        raise KeyError(f"education_requirement_stats: expected column {salary_col}")
+
+    required = df.get("edu_required")
+    level = df.get("edu_level")
+    technical = df.get("edu_technical")
+    temp = df.copy()
+    temp["education_level"] = [
+        _normalize_education_level(lvl, req, tech)
+        for lvl, req, tech in zip(
+            level if level is not None else [None] * len(df),
+            required if required is not None else [None] * len(df),
+            technical if technical is not None else [None] * len(df),
+        )
+    ]
+
+    grouped = (
+        temp.groupby("education_level")[salary_col]
+        .agg(vacancy_count="count", salary_median="median")
+        .reset_index()
+    )
+    total = len(temp)
+    grouped["share"] = grouped["vacancy_count"] / total if total else 0
+    return grouped.sort_values(by="vacancy_count", ascending=False)
+
+
 __all__ = [
     "missing_share",
     "describe_salary_by_group",
@@ -380,7 +492,9 @@ __all__ = [
     "salary_by_primary_role",
     "salary_by_experience_bucket",
     "salary_by_english_level",
+    "english_requirement_stats",
     "salary_by_stack_size",
+    "education_requirement_stats",
     "correlation_matrix",
     "top_value_counts",
     "skill_frequency",
