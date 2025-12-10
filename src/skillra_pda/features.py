@@ -77,8 +77,10 @@ ML_STACK_SKILLS = [
 ]
 
 
-def add_time_features(df: pd.DataFrame, date_col: str = "published_at_iso") -> pd.DataFrame:
-    """Add weekday/month/is_weekend flags from the publication date and vacancy age."""
+def add_time_features(
+    df: pd.DataFrame, date_col: str = "published_at_iso", recency_threshold_days: int = 30
+) -> pd.DataFrame:
+    """Add weekday/month/is_weekend flags, vacancy age, and recency indicator."""
     if date_col in df.columns:
         dt = pd.to_datetime(df[date_col], errors="coerce")
         df["published_weekday"] = dt.dt.weekday
@@ -93,9 +95,16 @@ def add_time_features(df: pd.DataFrame, date_col: str = "published_at_iso") -> p
     if "scraped_at_utc" in df.columns and date_col in df.columns:
         scraped = pd.to_datetime(df["scraped_at_utc"], errors="coerce", utc=True).dt.tz_convert(None)
         published = pd.to_datetime(df[date_col], errors="coerce", utc=True).dt.tz_convert(None)
-        df["vacancy_age_days"] = (scraped - published).dt.days
+        age_days = (scraped - published).dt.days
+        df["vacancy_age_days"] = age_days
+        df["is_recent"] = (
+            age_days.le(recency_threshold_days)
+            .where(~age_days.isna(), pd.NA)
+            .astype("boolean")
+        )
     else:
         df["vacancy_age_days"] = pd.NA
+        df["is_recent"] = pd.NA
     return df
 
 
@@ -317,6 +326,7 @@ def ensure_expected_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
         "primary_role": "other",
         "salary_bucket": pd.NA,
         "vacancy_age_days": pd.NA,
+        "is_recent": pd.NA,
         "core_data_skills_count": 0,
         "ml_stack_count": 0,
         "tech_stack_size": 0,
