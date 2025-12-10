@@ -149,35 +149,58 @@ def skill_share_by_grade(
 
 
 def build_skill_demand_profile(
-    df_features: pd.DataFrame, role: str, grade: str, role_col: str = "primary_role", grade_col: str = "grade"
+    df_features: pd.DataFrame,
+    role: str | None,
+    grade: str | None,
+    role_col: str = "primary_role",
+    grade_col: str = "grade",
+    skill_cols: list[str] | None = None,
+    skill_prefixes: tuple[str, ...] = ("skill_", "has_"),
 ) -> pd.DataFrame:
     """Return per-skill shares for the requested role/grade slice.
 
-    The function validates presence of the role/grade columns, filters the dataset,
-    and aggregates boolean skill columns (prefixes ``skill_`` and ``has_``) into
+    The function validates presence of the role/grade columns (if role/grade filters
+    were provided), filters the dataset, and aggregates boolean skill columns into
     a frequency table sorted by share descending.
     """
 
-    missing_cols = [col for col in [role_col, grade_col] if col not in df_features.columns]
+    required_columns: list[str] = []
+    if role is not None:
+        required_columns.append(role_col)
+    if grade is not None:
+        required_columns.append(grade_col)
+
+    missing_cols = [col for col in required_columns if col not in df_features.columns]
     if missing_cols:
         raise KeyError(f"Ожидал колонки {missing_cols} для build_skill_demand_profile")
 
-    filtered = df_features[
-        df_features[role_col].fillna("").str.lower() == (role or "").lower()
-    ]
-    filtered = filtered[
-        filtered[grade_col].fillna("").str.lower() == (grade or "").lower()
-    ]
+    filtered = df_features.copy()
+    if role is not None and role_col in filtered.columns:
+        filtered = filtered[
+            filtered[role_col].fillna("").str.lower() == (role or "").lower()
+        ]
+    if grade is not None and grade_col in filtered.columns:
+        filtered = filtered[
+            filtered[grade_col].fillna("").str.lower() == (grade or "").lower()
+        ]
 
-    skill_cols = [col for col in filtered.columns if col.startswith("skill_") or col.startswith("has_")]
+    if skill_cols is None:
+        skill_cols = [col for col in filtered.columns if col.startswith(skill_prefixes)]
+    else:
+        skill_cols = [col for col in skill_cols if col in filtered.columns]
+
     if filtered.empty or not skill_cols:
-        return pd.DataFrame(columns=["share", "count"])
+        return pd.DataFrame(columns=["skill", "market_share", "count"])
 
     skills_bool = filtered[skill_cols].fillna(False).astype(bool)
-    share = skills_bool.mean().sort_values(ascending=False)
+    share = skills_bool.mean()
     count = skills_bool.sum()
-    profile = pd.DataFrame({"share": share, "count": count}).sort_values(
-        by=["share", "count"], ascending=False
+    profile = (
+        pd.DataFrame(
+            {"skill": share.index, "market_share": share.values, "count": count.values}
+        )
+        .sort_values(by=["market_share", "count"], ascending=False)
+        .reset_index(drop=True)
     )
     return profile
 

@@ -7,6 +7,8 @@ from typing import Any
 
 import pandas as pd
 
+from .eda import build_skill_demand_profile
+
 
 @dataclass
 class Persona:
@@ -19,29 +21,30 @@ class Persona:
     constraints: dict[str, Any] = field(default_factory=dict)
 
 
-def _filter_by_target(df: pd.DataFrame, persona: Persona) -> pd.DataFrame:
+def _filter_by_target(
+    df: pd.DataFrame,
+    persona: Persona,
+    role_col: str = "primary_role",
+    grade_col: str = "grade",
+) -> pd.DataFrame:
+    """Filter dataframe by persona target role/grade and constraint columns."""
+
     filtered = df.copy()
 
-    role_column = None
-    if "primary_role" in filtered.columns:
-        role_column = "primary_role"
-    elif "target_role" in filtered.columns:
-        role_column = "target_role"
-
-    grade_column = "grade" if "grade" in filtered.columns else None
-
-    if role_column and persona.target_role:
+    if persona.target_role and role_col in filtered.columns:
         filtered = filtered[
-            filtered[role_column].fillna("").str.lower() == persona.target_role.lower()
+            filtered[role_col].fillna("").str.lower()
+            == persona.target_role.strip().lower()
         ]
 
-    if grade_column and persona.target_grade:
+    if persona.target_grade and grade_col in filtered.columns:
         filtered = filtered[
-            filtered[grade_column].fillna("").str.lower() == persona.target_grade.lower()
+            filtered[grade_col].fillna("").str.lower()
+            == persona.target_grade.strip().lower()
         ]
 
     for key, value in persona.constraints.items():
-        if key not in filtered.columns:
+        if key not in filtered.columns or value is None:
             continue
         if isinstance(value, (list, tuple, set)):
             filtered = filtered[filtered[key].isin(value)]
@@ -52,41 +55,52 @@ def _filter_by_target(df: pd.DataFrame, persona: Persona) -> pd.DataFrame:
 
 
 def skill_gap_for_persona(
-    df: pd.DataFrame, persona: Persona, skill_cols: list[str], min_share: float = 0.1
+    df_features: pd.DataFrame,
+    persona: Persona,
+    top_k: int = 15,
+    min_share: float = 0.05,
+    role_col: str = "primary_role",
+    grade_col: str = "grade",
+    skill_cols: list[str] | None = None,
 ) -> pd.DataFrame:
     """
     Calculate market share of skills for persona targets and mark gaps.
 
-    The function first filters the feature dataframe by persona attributes
-    (role, grade, custom constraints), builds a demand profile for the
-    requested skills, and then flags which of them are missing for the persona.
+    The function filters the feature dataframe by persona attributes (role, grade,
+    custom constraints), builds a demand profile for the requested skills, and then
+    flags which of them are missing for the persona.
 
     Returns columns: skill_name, market_share, persona_has (0/1), gap (bool).
     """
 
-    df_filtered = _filter_by_target(df, persona)
-    present_skills = [col for col in skill_cols if col in df_filtered.columns]
-    if not present_skills or df_filtered.empty:
+    df_filtered = _filter_by_target(df_features, persona, role_col=role_col, grade_col=grade_col)
+    if df_filtered.empty:
         return pd.DataFrame(columns=["skill_name", "market_share", "persona_has", "gap"])
 
-    skill_types = {col: "boolean" for col in present_skills}
-    skills_bool = df_filtered[present_skills].astype(skill_types)
-    demand_profile = skills_bool.fillna(False).mean()
+    demand_profile = build_skill_demand_profile(
+        df_filtered,
+        role=None,
+        grade=None,
+        role_col=role_col,
+        grade_col=grade_col,
+        skill_cols=skill_cols,
+    )
 
-    rows: list[dict[str, object]] = []
-    for skill_name, market_share in demand_profile.items():
-        persona_has = 1 if skill_name in persona.current_skills else 0
-        rows.append(
-            {
-                "skill_name": skill_name,
-                "market_share": market_share,
-                "persona_has": persona_has,
-                "gap": persona_has == 0 and market_share >= min_share,
-            }
-        )
+    if demand_profile.empty:
+        return pd.DataFrame(columns=["skill_name", "market_share", "persona_has", "gap"])
 
-    result = pd.DataFrame(rows)
-    return result.sort_values(by="market_share", ascending=False)
+    demand_profile = demand_profile[demand_profile["market_share"] >= min_share]
+    if top_k:
+        demand_profile = demand_profile.head(top_k)
+
+    result = demand_profile.copy()
+    result["skill_name"] = result["skill"]
+    result["persona_has"] = result["skill_name"].apply(
+        lambda skill: 1 if skill in persona.current_skills else 0
+    )
+    result["gap"] = result["persona_has"] == 0
+
+    return result[["skill_name", "market_share", "persona_has", "gap"]]
 
 
 def plot_persona_skill_gap(gap_df: pd.DataFrame, persona: Persona, output_dir: Path | None = None) -> Path:
