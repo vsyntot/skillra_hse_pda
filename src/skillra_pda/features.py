@@ -332,16 +332,23 @@ def ensure_expected_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def assemble_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Convenience pipeline for feature dataframe."""
+def engineer_all_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Run the full feature-engineering pipeline in the planned order."""
+
     grouped = detect_column_groups(df)
     df = add_time_features(df)
     df = add_city_tier(df)
     df = add_work_mode(df)
     df = add_boolean_counts(df, groups=grouped)
     df = add_stack_aggregates(df)
+    df = add_skill_stack_counts(df)
     df = add_experience_flags(df)
     df = add_primary_role(df)
     df = add_salary_bucket(df)
     df = add_structured_text_features(df)
     return ensure_expected_feature_columns(df)
+
+
+def assemble_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Convenience pipeline for feature dataframe."""
+    return engineer_all_features(df)
