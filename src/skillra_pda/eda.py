@@ -104,7 +104,43 @@ def salary_by_stack_size(
     return salary_summary_by_category(temp, "tech_stack_bin", salary_col)
 
 
-def describe_salary_by_domain(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped") -> pd.DataFrame:
+def extract_primary_domain(row: pd.Series, domain_cols: list[str], priorities: list[str] | None = None) -> str:
+    """Return the primary domain flag for a vacancy row.
+
+    Args:
+        row: A row containing boolean ``domain_*`` columns.
+        domain_cols: List of column names to inspect.
+        priorities: Optional list of domain names (without ``domain_`` prefix)
+            to check first when multiple flags are True.
+
+    Returns:
+        The domain name without the ``domain_`` prefix, or ``"unknown"`` if no
+        flags are set.
+    """
+
+    available_cols = [col for col in domain_cols if col in row.index]
+    if not available_cols:
+        return "unknown"
+
+    flags = row[available_cols].fillna(False).astype(bool)
+
+    ordered_cols = available_cols
+    if priorities:
+        domain_to_col = {col.removeprefix("domain_"): col for col in available_cols}
+        priority_cols = [domain_to_col[dom] for dom in priorities if dom in domain_to_col]
+        remaining_cols = [col for col in available_cols if col not in priority_cols]
+        ordered_cols = priority_cols + remaining_cols
+
+    for col in ordered_cols:
+        if bool(flags[col]):
+            return col.removeprefix("domain_")
+
+    return "unknown"
+
+
+def describe_salary_by_domain(
+    df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped", priorities: list[str] | None = None
+) -> pd.DataFrame:
     """Summarize salary metrics by primary domain derived from domain_* columns."""
 
     if salary_col not in df.columns:
@@ -115,15 +151,8 @@ def describe_salary_by_domain(df: pd.DataFrame, salary_col: str = "salary_mid_ru
         return pd.DataFrame()
 
     domain_flags = df[domain_cols].fillna(False).astype(bool)
-
-    def _primary_domain(row: pd.Series) -> str:
-        for col in domain_cols:
-            if bool(row[col]):
-                return col.replace("domain_", "")
-        return "unknown"
-
     temp = df.copy()
-    temp["domain"] = domain_flags.apply(_primary_domain, axis=1)
+    temp["domain"] = domain_flags.apply(extract_primary_domain, axis=1, args=(domain_cols, priorities))
 
     grouped = (
         temp.groupby("domain")[salary_col]
@@ -344,6 +373,7 @@ __all__ = [
     "describe_salary_by_group",
     "describe_salary_two_dim",
     "salary_summary_by_category",
+    "extract_primary_domain",
     "describe_salary_by_domain",
     "salary_by_city_tier",
     "salary_by_grade",
