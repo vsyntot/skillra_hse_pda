@@ -81,6 +81,8 @@ def add_time_features(
     df: pd.DataFrame, date_col: str = "published_at_iso", recency_threshold_days: int = 30
 ) -> pd.DataFrame:
     """Add weekday/month/is_weekend flags, vacancy age, and recency indicator."""
+
+    df = df.copy()
     if date_col in df.columns:
         dt = pd.to_datetime(df[date_col], errors="coerce")
         df["published_weekday"] = dt.dt.weekday
@@ -92,14 +94,19 @@ def add_time_features(
         df["published_month"] = pd.NA
         df["is_weekend_post"] = pd.NA
 
-    if "scraped_at_utc" in df.columns and date_col in df.columns:
+    vacancy_age = None
+    if "vacancy_age_days" in df.columns:
+        vacancy_age = pd.to_numeric(df["vacancy_age_days"], errors="coerce")
+    elif "scraped_at_utc" in df.columns and date_col in df.columns:
         scraped = pd.to_datetime(df["scraped_at_utc"], errors="coerce", utc=True).dt.tz_convert(None)
         published = pd.to_datetime(df[date_col], errors="coerce", utc=True).dt.tz_convert(None)
-        age_days = (scraped - published).dt.days
-        df["vacancy_age_days"] = age_days
+        vacancy_age = (scraped - published).dt.days
+
+    if vacancy_age is not None:
+        df["vacancy_age_days"] = vacancy_age
         df["is_recent"] = (
-            age_days.le(recency_threshold_days)
-            .where(~age_days.isna(), pd.NA)
+            vacancy_age.le(recency_threshold_days)
+            .where(~vacancy_age.isna(), pd.NA)
             .astype("boolean")
         )
     else:
@@ -351,7 +358,6 @@ def engineer_all_features(df: pd.DataFrame) -> pd.DataFrame:
     df = add_work_mode(df)
     df = add_boolean_counts(df, groups=grouped)
     df = add_stack_aggregates(df)
-    df = add_skill_stack_counts(df)
     df = add_experience_flags(df)
     df = add_primary_role(df)
     df = add_salary_bucket(df)
