@@ -6,7 +6,7 @@ from typing import Dict, Iterable, List, Tuple
 import numpy as np
 import pandas as pd
 
-PREFIX_GROUPS = ["has_", "skill_", "benefit_", "soft_", "domain_", "role_"]
+PREFIX_GROUPS = ["is_", "has_", "skill_", "benefit_", "soft_", "domain_", "role_"]
 BOOL_NULL_MARKERS = {"unknown", "", "n/a", "nan"}
 BOOL_TRUE_MARKERS = {True, 1, "1", "true", "yes"}
 BOOL_FALSE_MARKERS = {False, 0, "0", "false", "no"}
