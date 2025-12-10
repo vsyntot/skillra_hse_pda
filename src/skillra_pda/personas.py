@@ -33,12 +33,12 @@ def _filter_by_target(df: pd.DataFrame, persona: Persona) -> pd.DataFrame:
 
     grade_column = "grade" if "grade" in filtered.columns else None
 
-    if role_column and persona.target_role and role_column not in persona.constraints:
+    if role_column and persona.target_role:
         filtered = filtered[
             filtered[role_column].fillna("").str.lower() == persona.target_role.lower()
         ]
 
-    if grade_column and persona.target_grade and grade_column not in persona.constraints:
+    if grade_column and persona.target_grade:
         filtered = filtered[
             filtered[grade_column].fillna("").str.lower() == persona.target_grade.lower()
         ]
@@ -60,24 +60,31 @@ def skill_gap_for_persona(
     """
     Calculate market share of skills for persona targets and mark gaps.
 
+    The function first filters the feature dataframe by persona attributes
+    (role, grade, custom constraints), builds a demand profile for the
+    requested skills, and then flags which of them are missing for the persona.
+
     Returns columns: skill_name, market_share, persona_has (0/1), gap (bool).
     """
 
     df_filtered = _filter_by_target(df, persona)
     present_skills = [col for col in skill_cols if col in df_filtered.columns]
-    if not present_skills:
+    if not present_skills or df_filtered.empty:
         return pd.DataFrame(columns=["skill_name", "market_share", "persona_has", "gap"])
 
+    skill_types = {col: "boolean" for col in present_skills}
+    skills_bool = df_filtered[present_skills].astype(skill_types)
+    demand_profile = skills_bool.fillna(False).mean()
+
     rows: list[dict[str, object]] = []
-    for col in present_skills:
-        share = df_filtered[col].fillna(False).astype(bool).mean()
-        persona_has = 1 if col in persona.current_skills else 0
+    for skill_name, market_share in demand_profile.items():
+        persona_has = 1 if skill_name in persona.current_skills else 0
         rows.append(
             {
-                "skill_name": col,
-                "market_share": share,
+                "skill_name": skill_name,
+                "market_share": market_share,
                 "persona_has": persona_has,
-                "gap": persona_has == 0 and share >= min_share,
+                "gap": persona_has == 0 and market_share >= min_share,
             }
         )
 
