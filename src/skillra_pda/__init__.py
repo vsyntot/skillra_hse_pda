@@ -25,7 +25,13 @@ from .eda import (  # noqa: F401
     soft_skills_overall_stats,
 )
 from .features import ensure_expected_feature_columns  # noqa: F401
-from .personas import Persona  # noqa: F401
+from .personas import (  # noqa: F401
+    CAREER_SWITCHER_BI_ANALYST,
+    DATA_STUDENT_JUNIOR_DA_DS,
+    MID_DATA_ANALYST,
+    PERSONAS,
+    Persona,
+)
 from .viz import skill_heatmap  # noqa: F401
 
 __all__ = [
@@ -59,4 +65,8 @@ __all__ = [
     "skill_heatmap",
     "ensure_expected_feature_columns",
     "Persona",
+    "DATA_STUDENT_JUNIOR_DA_DS",
+    "CAREER_SWITCHER_BI_ANALYST",
+    "MID_DATA_ANALYST",
+    "PERSONAS",
 ]

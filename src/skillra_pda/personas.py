@@ -19,9 +19,6 @@ class Persona:
     constraints: dict[str, Any] = field(default_factory=dict)
 
 
-__all__ = ["Persona", "skill_gap_for_persona", "plot_persona_skill_gap"]
-
-
 def _filter_by_target(df: pd.DataFrame, persona: Persona) -> pd.DataFrame:
     filtered = df.copy()
 
@@ -118,3 +115,45 @@ def plot_persona_skill_gap(gap_df: pd.DataFrame, persona: Persona, output_dir: P
     fig.savefig(output_path, dpi=200)
     plt.close(fig)
     return output_path
+
+
+# Predefined personas for quick exploration in notebooks
+DATA_STUDENT_JUNIOR_DA_DS = Persona(
+    name="Data student → Junior DA/DS",
+    current_skills=["skill_sql", "skill_excel", "has_python", "skill_tableau"],
+    target_role="data analyst",
+    target_grade="junior",
+    constraints={"work_mode": ["remote", "hybrid"], "city_tier": ["Moscow", "SPb"]},
+)
+
+CAREER_SWITCHER_BI_ANALYST = Persona(
+    name="Career switcher → BI/Product analyst",
+    current_skills=["skill_powerbi", "skill_sql", "skill_excel", "skill_tableau"],
+    target_role="product analyst",
+    target_grade="middle",
+    constraints={"work_mode": ["hybrid", "office"], "city_tier": ["Moscow", "Million+"]},
+)
+
+MID_DATA_ANALYST = Persona(
+    name="Mid data analyst leveling up",
+    current_skills=["skill_sql", "has_python", "skill_powerbi", "skill_excel", "skill_tableau"],
+    target_role="data analyst",
+    target_grade="middle",
+    constraints={"work_mode": ["remote", "hybrid", "office"], "city_tier": ["Moscow", "SPb", "Million+", "Other RU"]},
+)
+
+PERSONAS = [
+    DATA_STUDENT_JUNIOR_DA_DS,
+    CAREER_SWITCHER_BI_ANALYST,
+    MID_DATA_ANALYST,
+]
+
+__all__ = [
+    "Persona",
+    "skill_gap_for_persona",
+    "plot_persona_skill_gap",
+    "DATA_STUDENT_JUNIOR_DA_DS",
+    "CAREER_SWITCHER_BI_ANALYST",
+    "MID_DATA_ANALYST",
+    "PERSONAS",
+]
