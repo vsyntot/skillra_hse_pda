@@ -47,7 +47,7 @@ def salary_summary_by_category(
     if category_col not in df.columns:
         raise ValueError(f"expected column {category_col} for salary_summary_by_category")
     return (
-        df.groupby(category_col)[salary_col]
+        df.groupby(category_col, observed=False)[salary_col]
         .agg(n="count", median="median", mean="mean", std="std")
         .reset_index()
         .sort_values(by="median", ascending=False)
@@ -292,7 +292,7 @@ def junior_friendly_share(df: pd.DataFrame, group_col: str = "primary_role") -> 
 
     subset = df[[group_col] + target_flags].copy()
     subset[target_flags] = subset[target_flags].fillna(False).astype(bool)
-    grouped = subset.groupby(group_col)[target_flags].mean().reset_index()
+    grouped = subset.groupby(group_col, observed=False)[target_flags].mean().reset_index()
     return grouped
 
 

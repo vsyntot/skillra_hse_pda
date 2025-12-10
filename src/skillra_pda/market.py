@@ -89,14 +89,14 @@ def build_market_view(df: pd.DataFrame) -> pd.DataFrame:
         "median_tech_stack_size": ("tech_stack_size", "median"),
     }
 
-    summary = temp.groupby(group_cols).agg(**aggregations).reset_index()
+    summary = temp.groupby(group_cols, observed=False).agg(**aggregations).reset_index()
 
     skill_cols = [col for col in df.columns if col.startswith("skill_") or col.startswith("has_")]
     if skill_cols:
         skill_means = temp[group_cols + skill_cols].copy()
         skill_means[skill_cols] = skill_means[skill_cols].fillna(False).astype(bool)
         formatted = (
-            skill_means.groupby(group_cols)[skill_cols]
+            skill_means.groupby(group_cols, observed=False)[skill_cols]
             .mean()
             .apply(_format_top_skills, axis=1)
             .reset_index(name="top_skills")
