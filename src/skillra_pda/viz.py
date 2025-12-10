@@ -247,24 +247,6 @@ def salary_by_employer_rating_plot(
     )
 
 
-def salary_by_english_level_plot(
-    df: pd.DataFrame,
-    salary_col: str = "salary_mid_rub_capped",
-    top_n: int = 10,
-    figsize: tuple[int, int] = (10, 6),
-) -> Path:
-    """Wrapper for salary mean/count by English level."""
-
-    return salary_mean_and_count_bar(
-        df,
-        category_col="lang_english_level",
-        salary_col=salary_col,
-        top_n=top_n,
-        figsize=figsize,
-        output_path=FIGURES_DIR / "fig_salary_by_english_level_mean_count.png",
-    )
-
-
 def salary_by_skills_bucket_plot(
     df: pd.DataFrame,
     salary_col: str = "salary_mid_rub_capped",
@@ -312,6 +294,50 @@ def salary_by_domain_plot(df: pd.DataFrame, top_n: int = 10, savepath: Path | No
 
     ax1.set_title("Salary by domain")
     filename = savepath or FIGURES_DIR / "fig_salary_by_domain.png"
+    return _save_fig(fig, filename)
+
+
+def salary_by_english_level_plot(
+    df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped", savepath: Path | None = None
+) -> Path:
+    """Plot median salary by normalized English level requirements."""
+
+    from . import eda as eda_mod
+
+    stats = eda_mod.english_requirement_stats(df, salary_col=salary_col)
+    if stats.empty:
+        raise ValueError("salary_by_english_level_plot: expected non-empty English stats")
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.bar(stats["english_level"], stats["salary_median"], color="steelblue")
+    ax.set_xlabel("English level")
+    ax.set_ylabel("Median salary (RUB)")
+    ax.set_title("Salary by English level requirement")
+    plt.xticks(rotation=45, ha="right")
+
+    filename = savepath or FIGURES_DIR / "fig_salary_by_english_level.png"
+    return _save_fig(fig, filename)
+
+
+def salary_by_education_level_plot(
+    df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped", savepath: Path | None = None
+) -> Path:
+    """Plot median salary by education requirement buckets."""
+
+    from . import eda as eda_mod
+
+    stats = eda_mod.education_requirement_stats(df, salary_col=salary_col)
+    if stats.empty:
+        raise ValueError("salary_by_education_level_plot: expected non-empty education stats")
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.bar(stats["education_requirement"], stats["salary_median"], color="steelblue")
+    ax.set_xlabel("Education requirement")
+    ax.set_ylabel("Median salary (RUB)")
+    ax.set_title("Salary by education requirement")
+    plt.xticks(rotation=45, ha="right")
+
+    filename = savepath or FIGURES_DIR / "fig_salary_by_education_level.png"
     return _save_fig(fig, filename)
 
 
