@@ -69,7 +69,9 @@ def salary_by_primary_role(df: pd.DataFrame, salary_col: str = "salary_mid_rub_c
 def salary_by_experience_bucket(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped") -> pd.DataFrame:
     base = None
     if "exp_min_years" in df.columns:
-        base = df["exp_min_years"]
+        base = df["exp_min_years"].copy()
+        if "exp_max_years" in df.columns:
+            base = base.fillna(df["exp_max_years"])
     elif "exp_max_years" in df.columns:
         base = df["exp_max_years"]
     if base is None:
@@ -149,27 +151,16 @@ def skill_share_by_grade(
 def junior_friendly_share(df: pd.DataFrame, group_col: str = "primary_role") -> pd.DataFrame:
     """Share of junior-friendly and battle-experience flags by the requested category."""
 
-    required = [group_col]
-    for col in required:
-        if col not in df.columns:
-            raise ValueError(f"expected column {col} for junior_friendly_share")
+    if group_col not in df.columns:
+        raise ValueError(f"expected column {group_col} for junior_friendly_share")
 
-    flags = [
-        col
-        for col in [
-            "is_for_juniors",
-            "allows_students",
-            "has_mentoring",
-            "has_test_task",
-            "is_junior_friendly",
-            "battle_experience",
-        ]
-        if col in df.columns
-    ]
-    if not flags:
-        return pd.DataFrame(columns=[group_col])
+    target_flags = [col for col in ["is_junior_friendly", "battle_experience"] if col in df.columns]
+    if not target_flags:
+        raise ValueError("expected is_junior_friendly or battle_experience columns for junior_friendly_share")
 
-    grouped = df.groupby(group_col)[flags].mean().reset_index()
+    subset = df[[group_col] + target_flags].copy()
+    subset[target_flags] = subset[target_flags].fillna(False).astype(bool)
+    grouped = subset.groupby(group_col)[target_flags].mean().reset_index()
     return grouped
 
 
