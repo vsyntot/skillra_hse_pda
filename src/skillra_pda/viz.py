@@ -272,12 +272,25 @@ def salary_by_skills_bucket_plot(
     )
 
 
-def salary_by_domain_plot(df: pd.DataFrame, top_n: int = 10, savepath: Path | None = None) -> Path:
-    """Barplot of median salary by domain with vacancy counts on a twin axis."""
+def salary_by_domain_plot(
+    df: pd.DataFrame,
+    top_n: int = 10,
+    savepath: Path | None = None,
+    priorities: list[str] | None = None,
+) -> Path:
+    """Barplot of median salary by domain with vacancy counts on a twin axis.
+
+    Args:
+        df: Feature dataset containing ``domain_*`` columns and salaries.
+        top_n: Number of domains to display.
+        savepath: Optional custom output path.
+        priorities: Optional ordered list of domain names (without ``domain_``
+            prefix) to use when multiple domain flags are set for a vacancy.
+    """
 
     from . import eda as eda_mod
 
-    summary = eda_mod.describe_salary_by_domain(df)
+    summary = eda_mod.describe_salary_by_domain(df, priorities=priorities)
     if summary.empty:
         raise ValueError("salary_by_domain_plot: expected domain_* columns and salary data")
 

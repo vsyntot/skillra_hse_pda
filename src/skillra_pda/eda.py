@@ -141,7 +141,12 @@ def english_requirement_stats(df: pd.DataFrame, salary_col: str = "salary_mid_ru
 
     grouped = (
         temp.groupby("english_level")[salary_col]
-        .agg(vacancy_count="count", salary_median="median")
+        .agg(
+            vacancy_count="count",
+            salary_median="median",
+            salary_q25=lambda s: s.quantile(0.25),
+            salary_q75=lambda s: s.quantile(0.75),
+        )
         .reset_index()
     )
     total = len(temp)
@@ -472,7 +477,12 @@ def education_requirement_stats(df: pd.DataFrame, salary_col: str = "salary_mid_
 
     grouped = (
         temp.groupby("education_level")[salary_col]
-        .agg(vacancy_count="count", salary_median="median")
+        .agg(
+            vacancy_count="count",
+            salary_median="median",
+            salary_q25=lambda s: s.quantile(0.25),
+            salary_q75=lambda s: s.quantile(0.75),
+        )
         .reset_index()
     )
     total = len(temp)
