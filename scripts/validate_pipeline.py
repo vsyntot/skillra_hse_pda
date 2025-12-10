@@ -21,11 +21,11 @@ def main() -> None:
     df = io.load_raw(raw_path)
     df = cleaning.parse_dates(df)
     df = cleaning.deduplicate(df)
-    dedup_rows = df.attrs.get("deduplicated_rows", 0)
+    dedup_rows = int(df.attrs.get("deduplicated_rows", 0) or 0)
     df = cleaning.handle_missingness(df)
     dropped_cols = df.attrs.get("dropped_cols", [])
     df = cleaning.salary_prepare(df)
-    non_rub_share = df.attrs.get("non_rub_share", 0.0)
+    non_rub_share = float(df.attrs.get("non_rub_share", 0.0) or 0.0)
 
     if "salary_gross" in df.columns:
         dtype_before = str(df["salary_gross"].dtype)
@@ -56,8 +56,9 @@ def main() -> None:
     if vacancy_age_ok:
         vacancy_age_ok = df_features["vacancy_age_days"].notna().any()
 
+    print("\n=== Cleaning metrics ===")
+    print(f"Deduplicated rows removed: {dedup_rows}")
     print(f"Dropped columns: {dropped_cols}")
-    print(f"Deduplicated rows: {dedup_rows}")
     print(f"Non-RUB share: {non_rub_share:.3f}")
     print(f"vacancy_age_days present: {vacancy_age_ok}")
 
