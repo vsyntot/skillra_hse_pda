@@ -525,19 +525,22 @@
 | --- | --- | --- | --- |
 | `published_weekday`, `published_month`, `is_weekend_post` | int/bool | календарь из `published_at_iso` | сезонность публикаций, фильтр выходных |
 | `vacancy_age_days` | int | `scraped_at_utc` и `published_at_iso` | свежесть вакансии, фильтр актуальных |
+| `salary_mid_rub`, `salary_mid_rub_capped` | float | пересчёт зарплат в рубли и обрезка экстремумов | сопоставимая шкала компенсаций и устойчивые квантильные разрезы |
+| `salary_bucket` | category | квантиль по `salary_mid_rub_capped` | стабильные разрезы зарплат без влияния выбросов |
 | `city_tier` | category | нормализация `city` | укрупнённые города: Москва/СПб/миллионники/прочие/KZ |
 | `work_mode` | category | агрегат `work_format`, `is_remote`, `is_hybrid` | единый формат для аналитики по удалёнке/гибриду |
-| `salary_bucket` | category | квантиль по `salary_mid_rub_capped` | стабильные разрезы зарплат без влияния экстремумов |
-| `role_count` | int | сумма `role_*` | ширина роли/мультидисциплинарность |
-| `primary_role` | category | приоритет в `role_*` | аккуратные разрезы по основной роли |
+| `role_count`, `primary_role` | int / category | сумма и приоритизация `role_*` | ширина роли и аккуратные срезы по основной роли |
 | `is_junior_friendly`, `battle_experience` | bool | агрегат `is_for_juniors`/`allows_students`/`exp_is_no_experience` | фильтры «подходит новичкам» vs «нужен боевой опыт» |
 | `description_len_chars`, `description_len_words` | int | длина `description` | полнота описания |
 | `requirements_count`, `responsibilities_count`, `must_have_skills_count`, `optional_skills_count` | int | разметка секций описания | жёсткость требований и прозрачность обязанностей |
-| `core_data_skills_count` | int | подсчёт выбранных `skill_*`/`has_python`/`skill_r` | ширина базового data-стека |
-| `ml_stack_count` | int | подсчёт ML-инструментов | насыщенность ML-стека |
-| `tech_stack_size`, `hard_stack_count`, `skills_count` (агрегат по `skill_*`) | int | сумма булевых `has_*`/`skill_*` | общий размер технологических требований |
-| `benefits_count` | int | сумма `benefit_*` | полнота компенсационного пакета |
-| `soft_skills_count` | int | сумма `soft_*` | акцент на soft skills в вакансии |
+| `core_data_skills_count`, `ml_stack_count`, `tech_stack_size` | int | подсчёт `skill_*`/`has_*` по группам | насыщенность базового data-стека, ML-стека и всего стека |
+| `hard_stack_count`, `skills_count`, `benefits_count`, `soft_skills_count`, `role_count` | int | сумма булевых `has_*`/`skill_*`/`benefit_*`/`soft_*`/`role_*` | размер технологического и компенсационного пакетов |
+| `junior_friendly_flag`, `remote_flag` | bool | подготовленные флаги для `market_view` | вычисление долей junior-friendly и удалёнки в агрегатах |
+| `vacancy_count` | int | агрегация в `market_view` | мощность сегмента роли × грейд × город/домен |
+| `salary_median`, `salary_q25`, `salary_q75` | float | квантильные метрики `market_view` по `salary_mid_rub_capped` | устойчивые зарплатные ориентиры по сегменту |
+| `junior_friendly_share`, `remote_share` | float | средние по флагам в `market_view` | доля вакансий, допускающих новичков/удалёнку |
+| `median_tech_stack_size` | float | медиана `tech_stack_size` в `market_view` | сложность технологических требований сегмента |
+| `top_skills` | str | форматирование средних по `has_*`/`skill_*` в `market_view` | сжатый список самых востребованных навыков с долями |
 
 ---
 
