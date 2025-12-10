@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List
+from typing import Any
 
 import pandas as pd
 
@@ -13,28 +13,49 @@ class Persona:
     """Persona definition for skill-gap analysis."""
 
     name: str
-    description: str
-    current_skills: List[str]
-    target_filter: Dict[str, object] = field(default_factory=dict)
+    current_skills: list[str]
+    target_role: str
+    target_grade: str
+    constraints: dict[str, Any] = field(default_factory=dict)
 
 
 __all__ = ["Persona", "skill_gap_for_persona", "plot_persona_skill_gap"]
 
 
-def _filter_by_target(df: pd.DataFrame, target_filter: Dict[str, object]) -> pd.DataFrame:
+def _filter_by_target(df: pd.DataFrame, persona: Persona) -> pd.DataFrame:
     filtered = df.copy()
-    for key, value in target_filter.items():
+
+    role_column = None
+    if "primary_role" in filtered.columns:
+        role_column = "primary_role"
+    elif "target_role" in filtered.columns:
+        role_column = "target_role"
+
+    grade_column = "grade" if "grade" in filtered.columns else None
+
+    if role_column and persona.target_role and role_column not in persona.constraints:
+        filtered = filtered[
+            filtered[role_column].fillna("").str.lower() == persona.target_role.lower()
+        ]
+
+    if grade_column and persona.target_grade and grade_column not in persona.constraints:
+        filtered = filtered[
+            filtered[grade_column].fillna("").str.lower() == persona.target_grade.lower()
+        ]
+
+    for key, value in persona.constraints.items():
         if key not in filtered.columns:
             continue
         if isinstance(value, (list, tuple, set)):
             filtered = filtered[filtered[key].isin(value)]
         else:
             filtered = filtered[filtered[key] == value]
+
     return filtered
 
 
 def skill_gap_for_persona(
-    df: pd.DataFrame, persona: Persona, skill_cols: List[str], min_share: float = 0.1
+    df: pd.DataFrame, persona: Persona, skill_cols: list[str], min_share: float = 0.1
 ) -> pd.DataFrame:
     """
     Calculate market share of skills for persona targets and mark gaps.
@@ -42,7 +63,7 @@ def skill_gap_for_persona(
     Returns columns: skill_name, market_share, persona_has (0/1), gap (bool).
     """
 
-    df_filtered = _filter_by_target(df, persona.target_filter)
+    df_filtered = _filter_by_target(df, persona)
     present_skills = [col for col in skill_cols if col in df_filtered.columns]
     if not present_skills:
         return pd.DataFrame(columns=["skill_name", "market_share", "persona_has", "gap"])
