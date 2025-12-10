@@ -40,6 +40,7 @@
 - `salary_mid`
 - `salary_range_width`
 - `salary_is_exact`
+- `salary_bucket`
 
 **Логика**
 - парсится блок «зарплата» на hh:
@@ -57,6 +58,7 @@
     - `X–Y` → `(X+Y)/2`
   - `salary_range_width` = `salary_to - salary_from` (или `0`, если точка)
   - `salary_is_exact` = `True`, если точка/фактически нет вилки; `False`, если реальная вилка
+  - `salary_bucket` — квантильная категория `low/mid/high` по `salary_mid_rub_capped` (для стабильных разрезов без экстремумов)
 
 **Зачем продукту**
 - карта зарплат по городам/уровням/ролям;
@@ -76,6 +78,7 @@
 - `metro_primary`
 - `metro_count`
 - `search_area_id`
+- `city_tier`
 
 **Логика**
 - `city` — город (обычно первая часть адреса до запятой).
@@ -85,6 +88,7 @@
 - `metro_primary` — первая найденная станция метро.
 - `metro_count` — число станций метро в адресе.
 - `search_area_id` — `area`, по которому выполнялся запрос (сейчас `113 = Россия`; в будущем поможет отличать РФ/BY/KZ и т.п.).
+- `city_tier` — нормализованный уровень города: `Moscow / SPb / Million+ / Other RU / KZ/Other / unknown`.
 
 **Зачем продукту**
 - гео-аналитика зарплат: Москва/СПб/регионы/СНГ;
@@ -98,14 +102,20 @@
 **Колонки**
 - `published_at_raw`
 - `published_at_iso`
-- `vacancy_age_days`
 - `scraped_at_utc`
+- `vacancy_age_days`
+- `published_weekday`
+- `published_month`
+- `is_weekend_post`
 
 **Логика**
 - `published_at_raw` — текст с hh («сегодня», «вчера», «26 ноября 2025»).
 - `published_at_iso` — нормализованная дата `YYYY-MM-DD`.
 - `scraped_at_utc` — момент запуска парсера (`datetime.now(timezone.utc)`).
 - `vacancy_age_days` — дней между публикацией и сбором (`scraped_at - published_at`).
+- `published_weekday` — день недели публикации (0 = понедельник, 6 = воскресенье).
+- `published_month` — номер месяца публикации (1–12).
+- `is_weekend_post` — булев флаг «вакансия опубликована в выходные».
 
 **Зачем продукту**
 - фильтровать актуальные вакансии;
@@ -155,6 +165,7 @@
 - `work_format`
 - `is_remote`
 - `is_hybrid`
+- `work_mode`
 
 **Логика**
 - `employment_type` — тип занятости (полная/частичная, проектная, стажировка и т.п.).
@@ -163,6 +174,7 @@
 - `work_format` — нормализованное: `office / remote / hybrid / field / unknown`.
 - `is_remote` — допускает полную удалёнку.
 - `is_hybrid` — гибрид (часть офис, часть удалёнка).
+- `work_mode` — агрегированный формат с приоритетом явного `work_format`, затем `is_remote`/`is_hybrid`; значения `remote / hybrid / office / field / unknown`.
 
 **Зачем продукту**
 - удалёнка — ключевой фильтр и фактор выбора;
@@ -179,6 +191,8 @@
 - `exp_max_years`
 - `exp_is_no_experience`
 - `grade` (junior/middle/senior/lead/...)
+- `is_junior_friendly`
+- `battle_experience`
 
 **Логика**
 - `experience` — строка hh («не требуется», «1–3 года», «3–6 лет», «более 6 лет»).
@@ -189,6 +203,8 @@
   - middle/без указания → `middle` (по умолчанию)
   - senior/ведущий/старший → `senior`
   - возможны `lead`, `head` и т.п.
+- `is_junior_friendly` — булев флаг, если вакансия явно допускает студентов/без опыта/входит в junior-пул (объединение `is_for_juniors`, `allows_students`, `exp_is_no_experience`).
+- `battle_experience` — обратный флаг к `is_junior_friendly`, подчёркивает требование «боевого» опыта.
 
 **Зачем продукту**
 - карта «зарплата vs уровень» (ядро MVP);
@@ -203,6 +219,8 @@
 - `role_backend`, `role_frontend`, `role_fullstack`, `role_mobile`
 - `role_data`, `role_ml`, `role_devops`, `role_qa`
 - `role_manager`, `role_product`, `role_analyst`
+- `role_count`
+- `primary_role`
 
 **Логика**
 - классификация по словарям/регэкспам в `title + description`:
@@ -215,6 +233,9 @@
   - продакты → `role_product`,
   - широкие аналитики → `role_analyst`.
 - одна вакансия может иметь несколько ролей (например, data + analyst).
+- агрегаты:
+  - `role_count` — количество сработавших флагов `role_*`;
+  - `primary_role` — приоритезированная основная роль (ML → Data → DevOps → Backend → … → Analyst). Категориальный признак для аккуратных разрезов.
 
 **Зачем продукту**
 - разрезы зарплат и требований по трекам;
@@ -320,11 +341,19 @@
 - `core_data_skills_count`
 - `ml_stack_count`
 - `tech_stack_size`
+- `hard_stack_count`
+- `skills_count` (агрегат по булевым `skill_*`)
+- `benefits_count`
+- `soft_skills_count`
 
 **Логика**
 - `core_data_skills_count` — количество “базовых” data-навыков из заданного набора (SQL, Excel, BI-инструменты, Python/R).
 - `ml_stack_count` — количество ML-инструментов (sklearn, PyTorch, TensorFlow, Airflow, Spark, Kafka и т.п.).
 - `tech_stack_size` — общее число `True` среди `has_*` и `skill_*`.
+- `hard_stack_count` — число флагов `has_*` (ядро технологического стека вакансии).
+- `skills_count` (агрегат) — число флагов `skill_*` (аналитические навыки из специализированного словаря).
+- `benefits_count` — сколько преимуществ/плюшек указано (`benefit_*`).
+- `soft_skills_count` — количество найденных soft skills (`soft_*`).
 
 **Зачем продукту**
 - heatmap «навык × зарплата/город/уровень»;
@@ -408,6 +437,7 @@
 - `benefit_education`
 - `benefit_remote_compensation`
 - `benefit_stock`
+- `benefits_count`
 
 **Логика**
 - по тексту условий:
@@ -433,6 +463,7 @@
 - `soft_result_oriented`
 - `soft_structured_thinking`
 - `soft_critical_thinking`
+- `soft_skills_count`
 
 **Логика**
 - по тексту требований:
@@ -485,6 +516,28 @@
 - `core_data_skills_count`, `ml_stack_count`, `tech_stack_size` (ширина требований),
 - `vacancy_age_days` (актуальность/свежесть),
 - все `is_*`, `has_*`, `skill_*` совместно образуют детальную “матрицу рынка”.
+
+---
+
+## Engineered features — быстрый справочник
+
+| Признак | Тип | Источник/база | Назначение |
+| --- | --- | --- | --- |
+| `published_weekday`, `published_month`, `is_weekend_post` | int/bool | календарь из `published_at_iso` | сезонность публикаций, фильтр выходных |
+| `vacancy_age_days` | int | `scraped_at_utc` и `published_at_iso` | свежесть вакансии, фильтр актуальных |
+| `city_tier` | category | нормализация `city` | укрупнённые города: Москва/СПб/миллионники/прочие/KZ |
+| `work_mode` | category | агрегат `work_format`, `is_remote`, `is_hybrid` | единый формат для аналитики по удалёнке/гибриду |
+| `salary_bucket` | category | квантиль по `salary_mid_rub_capped` | стабильные разрезы зарплат без влияния экстремумов |
+| `role_count` | int | сумма `role_*` | ширина роли/мультидисциплинарность |
+| `primary_role` | category | приоритет в `role_*` | аккуратные разрезы по основной роли |
+| `is_junior_friendly`, `battle_experience` | bool | агрегат `is_for_juniors`/`allows_students`/`exp_is_no_experience` | фильтры «подходит новичкам» vs «нужен боевой опыт» |
+| `description_len_chars`, `description_len_words` | int | длина `description` | полнота описания |
+| `requirements_count`, `responsibilities_count`, `must_have_skills_count`, `optional_skills_count` | int | разметка секций описания | жёсткость требований и прозрачность обязанностей |
+| `core_data_skills_count` | int | подсчёт выбранных `skill_*`/`has_python`/`skill_r` | ширина базового data-стека |
+| `ml_stack_count` | int | подсчёт ML-инструментов | насыщенность ML-стека |
+| `tech_stack_size`, `hard_stack_count`, `skills_count` (агрегат по `skill_*`) | int | сумма булевых `has_*`/`skill_*` | общий размер технологических требований |
+| `benefits_count` | int | сумма `benefit_*` | полнота компенсационного пакета |
+| `soft_skills_count` | int | сумма `soft_*` | акцент на soft skills в вакансии |
 
 ---
 
