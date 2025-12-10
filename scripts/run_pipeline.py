@@ -17,7 +17,7 @@ def main() -> None:
 
     raw_path = Path(config.RAW_DATA_FILE)
     clean_path = Path(config.CLEAN_DATA_FILE)
-    feature_path = Path(config.FEATURE_DATA_FILE)
+    feature_path = config.FEATURE_DATA_FILE
 
     df_raw = io.load_raw(raw_path)
     df_clean = cleaning.handle_missingness(df_raw)
@@ -26,7 +26,7 @@ def main() -> None:
     df_clean = cleaning.deduplicate(df_clean)
     io.save_processed(df_clean, clean_path)
 
-    df_features = features.engineer_all_features(df_clean)
+    df_features = features.engineer_all_features(df_clean.copy())
     io.save_processed(df_features, feature_path)
 
     print(f"Saved clean dataset to {clean_path}")
