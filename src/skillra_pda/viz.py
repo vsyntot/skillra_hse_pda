@@ -247,24 +247,6 @@ def salary_by_employer_rating_plot(
     )
 
 
-def salary_by_english_level_plot(
-    df: pd.DataFrame,
-    salary_col: str = "salary_mid_rub_capped",
-    top_n: int = 10,
-    figsize: tuple[int, int] = (10, 6),
-) -> Path:
-    """Wrapper for salary mean/count by English level."""
-
-    return salary_mean_and_count_bar(
-        df,
-        category_col="lang_english_level",
-        salary_col=salary_col,
-        top_n=top_n,
-        figsize=figsize,
-        output_path=FIGURES_DIR / "fig_salary_by_english_level_mean_count.png",
-    )
-
-
 def salary_by_skills_bucket_plot(
     df: pd.DataFrame,
     salary_col: str = "salary_mid_rub_capped",
@@ -312,6 +294,48 @@ def salary_by_domain_plot(df: pd.DataFrame, top_n: int = 10, savepath: Path | No
 
     ax1.set_title("Salary by domain")
     filename = savepath or FIGURES_DIR / "fig_salary_by_domain.png"
+    return _save_fig(fig, filename)
+
+
+def salary_by_english_level_plot(df: pd.DataFrame, savepath: Path | None = None) -> Path:
+    """Barplot of median salary by English level."""
+
+    from . import eda as eda_mod
+
+    summary = eda_mod.english_requirement_stats(df)
+    if summary.empty:
+        raise ValueError("salary_by_english_level_plot: expected lang_* columns and salary data")
+
+    ordered = summary.sort_values(by="salary_median", ascending=False)
+    fig, ax = plt.subplots(figsize=(9, 6))
+    ax.bar(ordered["english_level"], ordered["salary_median"], color="steelblue")
+    ax.set_ylabel("Median salary (RUB)")
+    ax.set_xlabel("English level")
+    ax.tick_params(axis="x", rotation=45, labelrotation=45)
+    ax.set_title("Salary by English level")
+
+    filename = savepath or FIGURES_DIR / "fig_salary_by_english_level.png"
+    return _save_fig(fig, filename)
+
+
+def salary_by_education_level_plot(df: pd.DataFrame, savepath: Path | None = None) -> Path:
+    """Barplot of median salary by education requirement level."""
+
+    from . import eda as eda_mod
+
+    summary = eda_mod.education_requirement_stats(df)
+    if summary.empty:
+        raise ValueError("salary_by_education_level_plot: expected edu_* columns and salary data")
+
+    ordered = summary.sort_values(by="salary_median", ascending=False)
+    fig, ax = plt.subplots(figsize=(9, 6))
+    ax.bar(ordered["education_level"], ordered["salary_median"], color="seagreen")
+    ax.set_ylabel("Median salary (RUB)")
+    ax.set_xlabel("Education level")
+    ax.tick_params(axis="x", rotation=45, labelrotation=45)
+    ax.set_title("Salary by education requirement")
+
+    filename = savepath or FIGURES_DIR / "fig_salary_by_education_level.png"
     return _save_fig(fig, filename)
 
 
