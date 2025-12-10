@@ -148,6 +148,40 @@ def skill_share_by_grade(
     return pivot
 
 
+def build_skill_demand_profile(
+    df_features: pd.DataFrame, role: str, grade: str, role_col: str = "primary_role", grade_col: str = "grade"
+) -> pd.DataFrame:
+    """Return per-skill shares for the requested role/grade slice.
+
+    The function validates presence of the role/grade columns, filters the dataset,
+    and aggregates boolean skill columns (prefixes ``skill_`` and ``has_``) into
+    a frequency table sorted by share descending.
+    """
+
+    missing_cols = [col for col in [role_col, grade_col] if col not in df_features.columns]
+    if missing_cols:
+        raise KeyError(f"Ожидал колонки {missing_cols} для build_skill_demand_profile")
+
+    filtered = df_features[
+        df_features[role_col].fillna("").str.lower() == (role or "").lower()
+    ]
+    filtered = filtered[
+        filtered[grade_col].fillna("").str.lower() == (grade or "").lower()
+    ]
+
+    skill_cols = [col for col in filtered.columns if col.startswith("skill_") or col.startswith("has_")]
+    if filtered.empty or not skill_cols:
+        return pd.DataFrame(columns=["share", "count"])
+
+    skills_bool = filtered[skill_cols].fillna(False).astype(bool)
+    share = skills_bool.mean().sort_values(ascending=False)
+    count = skills_bool.sum()
+    profile = pd.DataFrame({"share": share, "count": count}).sort_values(
+        by=["share", "count"], ascending=False
+    )
+    return profile
+
+
 def junior_friendly_share(df: pd.DataFrame, group_col: str = "primary_role") -> pd.DataFrame:
     """Share of junior-friendly and battle-experience flags by the requested category."""
 
@@ -318,6 +352,7 @@ __all__ = [
     "top_value_counts",
     "skill_frequency",
     "skill_share_by_grade",
+    "build_skill_demand_profile",
     "junior_friendly_share",
     "salary_summary_by_grade_and_city",
     "salary_summary_by_role_and_work_mode",
