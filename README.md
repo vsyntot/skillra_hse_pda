@@ -6,8 +6,8 @@
 1. Создайте окружение: `python -m venv .venv && source .venv/bin/activate`.
 2. Установите зависимости: `pip install -r requirements.txt` или `pip install -e . -r requirements.txt` для editable-режима.
 3. Убедитесь, что исходный файл лежит по умолчанию в `data/raw/hh_moscow_it_2025_11_30.csv` (не изменяйте raw-данные).
-4. Постройте чистые, фичевые датасеты и витрину рынка: `python scripts/run_pipeline.py` (результаты в `data/processed/hh_clean.parquet`, `hh_features.parquet` и `market_view.parquet`).
-5. Быстрый регрессионный чек пайплайна: `python scripts/validate_pipeline.py`.
+4. Запустите сборку всех артефактов: `python scripts/run_pipeline.py`. Скрипт сам подтянет пути из `src/skillra_pda/config.py` и сохранит `hh_clean.parquet`, `hh_features.parquet` и `market_view.parquet` в `data/processed/`.
+5. Быстрый smoke-чек пайплайна: `python scripts/validate_pipeline.py`.
 6. Прогон ноутбука end-to-end: `python scripts/validate_notebook.py` (использует `jupyter nbconvert --execute`).
 
 ### Полный аналитический пайплайн (от сырого CSV до витрины рынка)
@@ -17,13 +17,14 @@
    - На выходе появятся:
      - `data/processed/hh_clean.parquet` — очищенные данные.
      - `data/processed/hh_features.parquet` — фичи (стек, грейд, режим работы, junior-friendly и др.).
-     - `data/processed/market_view.parquet` — агрегаты по роли × грейду × городу/домену с долей remote/junior-friendly и топ-скиллами.
+     - `data/processed/market_view.parquet` — агрегаты по роли × грейду × городу/домену с долей remote/junior-friendly, медианой зарплат и топ-скиллами.
+   - Скрипт печатает пути сохранения, а также применяет обрезку выбросов зарплат и расчёт `primary_role`/`city_tier`, чтобы витрина была готова к использованию агентом Skillra.
 4. Для быстрой проверки используйте `python scripts/validate_pipeline.py` (контроль ключевых инвариантов) и при необходимости `pytest`.
 5. Чтобы убедиться, что ноутбук повторно воспроизводим, прогоните `python scripts/validate_notebook.py` (скаченные артефакты из `data/processed/` переиспользуются внутри ноутбука).
 
 ### Работа с витриной `market_view` и функцией `analyze_persona`
-- `market_view`: откройте `data/processed/market_view.parquet` после пайплайна и фильтруйте по нужной роли/грейду/городу. Столбцы `salary_median`, `salary_q25/q75`, `remote_share`, `junior_friendly_share` и `top_skills` дают готовые фразы для Skillra-агента.
-- В Python можно загрузить витрину так: `import pandas as pd; mv = pd.read_parquet("data/processed/market_view.parquet")` и далее использовать `mv.query("primary_role == 'Data Analyst' and grade == 'Middle'")`.
+- `market_view`: откройте `data/processed/market_view.parquet` после пайплайна и фильтруйте по нужной роли/грейду/городу. Столбцы `salary_median`, `salary_q25/q75`, `remote_share`, `junior_friendly_share`, `median_tech_stack_size` и `top_skills` дают готовые фразы для Skillra-агента.
+- В Python можно загрузить витрину так: `import pandas as pd; mv = pd.read_parquet("data/processed/market_view.parquet")` и далее использовать `mv.query("primary_role == 'Data Analyst' and grade == 'Middle'")` или группировки по `domain`, чтобы формировать карточки сегмента.
 - Для персон: импортируйте `Persona` и `analyze_persona` из `src.skillra_pda.personas`. Пример:
   ```python
   from src.skillra_pda.personas import Persona, analyze_persona
@@ -39,9 +40,10 @@
   )
   result = analyze_persona(df, persona, top_k=10)
   print(result["market_summary"])
+  print(result["skill_gap"])
   print(result["recommended_skills"])
   ```
-- Блок `market_summary` показывает размер и зарплатный уровень сегмента, `recommended_skills` — топ навыков с наибольшим гэпом; эти две части можно напрямую подставлять в ответы агента Skillra для выбранной персоны.
+- `market_summary` показывает размер сегмента и зарплатные квантильные показатели, `skill_gap` раскрывает востребованные навыки с долями требований, а `recommended_skills` — топ навыков с наибольшим гэпом. Эти блоки можно напрямую отдавать AI-агенту Skillra для подсказок и планов развития.
 
 ## Как быстро проверить проект
 - Активируйте виртуальное окружение и установите зависимости: `python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`.
