@@ -141,7 +141,12 @@ def english_requirement_stats(df: pd.DataFrame, salary_col: str = "salary_mid_ru
 
     grouped = (
         temp.groupby("english_level")[salary_col]
-        .agg(vacancy_count="count", salary_median="median")
+        .agg(
+            vacancy_count="count",
+            salary_median="median",
+            salary_q25=lambda s: s.quantile(0.25),
+            salary_q75=lambda s: s.quantile(0.75),
+        )
         .reset_index()
     )
     total = len(temp)
@@ -387,6 +392,48 @@ def soft_skills_overall_stats(df: pd.DataFrame) -> pd.DataFrame:
     return result.reset_index()
 
 
+def top_employers(
+    df: pd.DataFrame,
+    company_col: str = "company",
+    salary_col: str = "salary_mid_rub_capped",
+    rating_col: str | None = "employer_rating",
+    top_n: int = 15,
+) -> pd.DataFrame:
+    """Return top employers by vacancy count with optional salary and rating stats."""
+
+    if company_col not in df.columns:
+        return pd.DataFrame()
+
+    top_companies = df[company_col].value_counts().head(top_n).index
+    subset = df[df[company_col].isin(top_companies)].copy()
+
+    agg_spec: dict[str, tuple[str, str]] = {"vacancy_count": (company_col, "size")}
+    if salary_col in subset.columns:
+        agg_spec["salary_median"] = (salary_col, "median")
+    if rating_col and rating_col in subset.columns:
+        agg_spec["rating_mean"] = (rating_col, "mean")
+
+    summary = subset.groupby(company_col).agg(**agg_spec).reset_index()
+    summary["share"] = summary["vacancy_count"] / len(df) if len(df) else 0
+    return summary.sort_values(by="vacancy_count", ascending=False)
+
+
+def benefits_by_employer(df: pd.DataFrame, company_col: str = "company", top_n: int = 10) -> pd.DataFrame:
+    """Share of benefits for the top employers."""
+
+    benefits = [col for col in df.columns if col.startswith("benefit_")]
+    if not benefits or company_col not in df.columns:
+        return pd.DataFrame()
+
+    top_companies = df[company_col].value_counts().head(top_n).index
+    subset = df[df[company_col].isin(top_companies)].copy()
+    subset[benefits] = subset[benefits].fillna(False).astype(bool)
+
+    grouped = subset.groupby(company_col)[benefits].mean()
+    grouped["n_vacancies"] = subset.groupby(company_col).size()
+    return grouped.reset_index()
+
+
 def soft_skills_by_employer(df: pd.DataFrame, company_col: str = "company", top_n: int = 10) -> pd.DataFrame:
     """Soft skill shares for top employers."""
 
@@ -472,7 +519,12 @@ def education_requirement_stats(df: pd.DataFrame, salary_col: str = "salary_mid_
 
     grouped = (
         temp.groupby("education_level")[salary_col]
-        .agg(vacancy_count="count", salary_median="median")
+        .agg(
+            vacancy_count="count",
+            salary_median="median",
+            salary_q25=lambda s: s.quantile(0.25),
+            salary_q75=lambda s: s.quantile(0.75),
+        )
         .reset_index()
     )
     total = len(temp)
@@ -509,4 +561,6 @@ __all__ = [
     "soft_skills_by_employer",
     "soft_skills_correlation",
     "junior_friendly_share_by_segment",
+    "top_employers",
+    "benefits_by_employer",
 ]
