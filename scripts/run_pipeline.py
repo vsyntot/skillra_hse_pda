@@ -17,7 +17,7 @@ def main() -> None:
 
     raw_path = Path(config.RAW_DATA_FILE)
     clean_path = Path(config.CLEAN_DATA_FILE)
-    feature_path = config.FEATURE_DATA_FILE
+    feature_path = Path(config.FEATURE_DATA_FILE)
 
     df_raw = io.load_raw(raw_path)
     df_clean = cleaning.handle_missingness(df_raw)
