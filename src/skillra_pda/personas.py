@@ -14,14 +14,14 @@ class Persona:
 
     name: str
     description: str
-    goals: List[str] = field(default_factory=list)
-    limitations: List[str] = field(default_factory=list)
     current_skills: List[str]
     target_role: str
     target_grade: str | None = None
     target_city_tier: str | None = None
     target_work_mode: str | None = None
     constraints: Dict[str, object] = field(default_factory=dict)
+    goals: List[str] = field(default_factory=list)
+    limitations: List[str] = field(default_factory=list)
 
     # Backward compatibility: expose target_filter as a property to avoid breaking old callers
     @property
