@@ -409,6 +409,66 @@ def heatmap_soft_skills_correlation(
     return _save_fig(fig, filename)
 
 
+def benefits_employer_heatmap(
+    df: pd.DataFrame, top_n: int = 10, savepath: Path | None = None
+) -> Path:
+    """Heatmap of benefit prevalence by employer for top companies."""
+
+    from . import eda as eda_mod
+
+    _require_columns(df, ["company"], "benefits_employer_heatmap")
+    benefit_cols = [col for col in df.columns if col.startswith("benefit_")]
+    if not benefit_cols:
+        raise ValueError("benefits_employer_heatmap: expected benefit_ columns in dataframe")
+
+    pivot = eda_mod.benefits_by_employer(df, top_n=top_n)
+    if pivot.empty:
+        raise ValueError("benefits_employer_heatmap: no data to plot")
+
+    numeric = pivot.astype(float)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    cax = ax.imshow(numeric.values, aspect="auto", cmap="Greens")
+    ax.set_xticks(range(len(numeric.columns)))
+    ax.set_xticklabels(numeric.columns, rotation=90)
+    ax.set_yticks(range(len(numeric.index)))
+    ax.set_yticklabels(numeric.index)
+    fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04, label="Share")
+    ax.set_title("Benefits share by employer")
+
+    filename = savepath or FIGURES_DIR / "fig_benefits_by_employer_heatmap.png"
+    return _save_fig(fig, filename)
+
+
+def soft_skills_employer_heatmap(
+    df: pd.DataFrame, top_n: int = 10, savepath: Path | None = None
+) -> Path:
+    """Heatmap of soft skill prevalence by employer for top companies."""
+
+    from . import eda as eda_mod
+
+    _require_columns(df, ["company"], "soft_skills_employer_heatmap")
+    soft_cols = [col for col in df.columns if col.startswith("soft_")]
+    if not soft_cols:
+        raise ValueError("soft_skills_employer_heatmap: expected soft_ columns in dataframe")
+
+    pivot = eda_mod.soft_skills_by_employer(df, top_n=top_n)
+    if pivot.empty:
+        raise ValueError("soft_skills_employer_heatmap: no data to plot")
+
+    numeric = pivot.astype(float)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    cax = ax.imshow(numeric.values, aspect="auto", cmap="Purples")
+    ax.set_xticks(range(len(numeric.columns)))
+    ax.set_xticklabels(numeric.columns, rotation=90)
+    ax.set_yticks(range(len(numeric.index)))
+    ax.set_yticklabels(numeric.index)
+    fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04, label="Share")
+    ax.set_title("Soft skills share by employer")
+
+    filename = savepath or FIGURES_DIR / "fig_soft_skills_by_employer_heatmap.png"
+    return _save_fig(fig, filename)
+
+
 def distribution_with_boxplot(
     df: pd.DataFrame,
     column: str,
