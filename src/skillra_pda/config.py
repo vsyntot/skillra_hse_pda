@@ -19,7 +19,6 @@ NOTEBOOKS_DIR = REPO_ROOT / "notebooks"
 RAW_DATA_FILE = RAW_DATA_DIR / "hh_moscow_it_2025_11_30.csv"
 CLEAN_DATA_FILE = PROCESSED_DATA_DIR / "hh_clean.parquet"
 FEATURE_DATA_FILE = PROCESSED_DATA_DIR / "hh_features.parquet"
-MARKET_DATA_FILE = PROCESSED_DATA_DIR / "hh_market.parquet"
 
 
 def ensure_directories() -> None:

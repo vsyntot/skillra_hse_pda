@@ -1,7 +1,7 @@
 """Skillra HSE Python for Data Analysis utilities."""
 
 # Re-export commonly used modules and helpers to simplify notebook imports.
-from . import cleaning, config, eda, features, io, market, personas, viz  # noqa: F401
+from . import cleaning, config, eda, features, io, personas, viz  # noqa: F401
 from .cleaning import ensure_salary_gross_boolean  # noqa: F401
 from .eda import (  # noqa: F401
     benefits_summary_by_company,
@@ -25,7 +25,6 @@ from .eda import (  # noqa: F401
     soft_skills_correlation,
     soft_skills_overall_stats,
 )
-from .market import build_market_view  # noqa: F401
 from .features import ensure_expected_feature_columns  # noqa: F401
 from .personas import (  # noqa: F401
     DATA_STUDENT,
@@ -44,7 +43,6 @@ __all__ = [
     "eda",
     "features",
     "io",
-    "market",
     "personas",
     "viz",
     "ensure_salary_gross_boolean",
@@ -74,7 +72,6 @@ __all__ = [
     "analyze_persona",
     "build_skill_demand_profile",
     "skill_gap_for_persona",
-    "build_market_view",
     "DATA_STUDENT",
     "SWITCHER_BI",
     "MID_DATA_ANALYST",

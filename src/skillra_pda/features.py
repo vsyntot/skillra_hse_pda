@@ -345,9 +345,3 @@ def assemble_features(df: pd.DataFrame) -> pd.DataFrame:
     df = add_salary_bucket(df)
     df = add_structured_text_features(df)
     return ensure_expected_feature_columns(df)
-
-
-def engineer_all_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Alias entrypoint kept for backwards compatibility with notebooks."""
-
-    return assemble_features(df)
