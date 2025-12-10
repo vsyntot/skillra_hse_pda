@@ -398,6 +398,41 @@ def heatmap_benefits_by_company(
     return _save_fig(fig, filename)
 
 
+def benefits_employer_heatmap(
+    df: pd.DataFrame,
+    top_n_employers: int = 10,
+    top_n_benefits: int = 12,
+    figsize: tuple[int, int] = (12, 6),
+    output_path: Path | None = None,
+) -> Path:
+    """Plot heatmap of benefit prevalence for top employers."""
+
+    from . import eda as eda_mod
+
+    summary = eda_mod.benefits_by_employer(df, top_n=top_n_employers)
+    if summary.empty:
+        raise ValueError("benefits_employer_heatmap: expected benefit_* columns and company data")
+
+    benefit_cols = [col for col in summary.columns if col.startswith("benefit_")]
+    if not benefit_cols:
+        raise ValueError("benefits_employer_heatmap: no benefit columns found after aggregation")
+
+    benefit_order = summary[benefit_cols].mean().sort_values(ascending=False)
+    top_benefits = benefit_order.head(top_n_benefits).index if top_n_benefits else benefit_cols
+
+    pivot = summary.set_index("company")[list(top_benefits)]
+    fig, ax = plt.subplots(figsize=figsize)
+    cax = ax.imshow(pivot.values.astype(float), aspect="auto", cmap="Greens")
+    ax.set_xticks(range(len(pivot.columns)))
+    ax.set_xticklabels(pivot.columns, rotation=90)
+    ax.set_yticks(range(len(pivot.index)))
+    ax.set_yticklabels(pivot.index)
+    fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04, label="Share")
+    ax.set_title("Benefits by employer")
+    filename = output_path or FIGURES_DIR / "fig_benefits_employer_heatmap.png"
+    return _save_fig(fig, filename)
+
+
 def heatmap_soft_skills_correlation(
     corr_df: pd.DataFrame, figsize: tuple[int, int] = (8, 6), output_path: Path | None = None
 ) -> Path:
@@ -417,6 +452,41 @@ def heatmap_soft_skills_correlation(
     fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04)
     ax.set_title("Soft skills correlation")
     filename = output_path or FIGURES_DIR / "fig_soft_skills_corr_heatmap.png"
+    return _save_fig(fig, filename)
+
+
+def soft_skills_employer_heatmap(
+    df: pd.DataFrame,
+    top_n_employers: int = 10,
+    top_n_skills: int = 12,
+    figsize: tuple[int, int] = (12, 6),
+    output_path: Path | None = None,
+) -> Path:
+    """Plot heatmap of soft skill prevalence for top employers."""
+
+    from . import eda as eda_mod
+
+    summary = eda_mod.soft_skills_by_employer(df, top_n=top_n_employers)
+    if summary.empty:
+        raise ValueError("soft_skills_employer_heatmap: expected soft_* columns and company data")
+
+    skill_cols = [col for col in summary.columns if col.startswith("soft_")]
+    if not skill_cols:
+        raise ValueError("soft_skills_employer_heatmap: no soft skill columns found after aggregation")
+
+    skill_order = summary[skill_cols].mean().sort_values(ascending=False)
+    top_skills = skill_order.head(top_n_skills).index if top_n_skills else skill_cols
+
+    pivot = summary.set_index("company")[list(top_skills)]
+    fig, ax = plt.subplots(figsize=figsize)
+    cax = ax.imshow(pivot.values.astype(float), aspect="auto", cmap="Blues")
+    ax.set_xticks(range(len(pivot.columns)))
+    ax.set_xticklabels(pivot.columns, rotation=90)
+    ax.set_yticks(range(len(pivot.index)))
+    ax.set_yticklabels(pivot.index)
+    fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04, label="Share")
+    ax.set_title("Soft skills by employer")
+    filename = output_path or FIGURES_DIR / "fig_soft_skills_employer_heatmap.png"
     return _save_fig(fig, filename)
 
 
