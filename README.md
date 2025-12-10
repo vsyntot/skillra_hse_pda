@@ -6,7 +6,7 @@
 1. Создайте окружение: `python -m venv .venv && source .venv/bin/activate`.
 2. Установите зависимости: `pip install -r requirements.txt` или `pip install -e . -r requirements.txt` для editable-режима.
 3. Убедитесь, что исходный файл лежит по умолчанию в `data/raw/hh_moscow_it_2025_11_30.csv` (не изменяйте raw-данные).
-4. Постройте чистые и фичевые датасеты: `python scripts/run_pipeline.py` (результаты в `data/processed/hh_clean.parquet` и `hh_features.parquet`).
+4. Постройте чистые, фичевые датасеты и витрину рынка: `python scripts/run_pipeline.py` (результаты в `data/processed/hh_clean.parquet`, `hh_features.parquet` и `market_view.parquet`).
 5. Быстрый регрессионный чек пайплайна: `python scripts/validate_pipeline.py`.
 6. Прогон ноутбука end-to-end: `python scripts/validate_notebook.py` (использует `jupyter nbconvert --execute`).
 
@@ -22,6 +22,7 @@
 ## Артефакты
 - `data/processed/hh_clean.parquet` — очищенный датасет.
 - `data/processed/hh_features.parquet` — обогащённые признаки (возраст вакансии, стековые счётчики, текстовые метрики, junior-friendly и др.).
+- `data/processed/market_view.parquet` — агрегированная витрина рынка (роль × грейд × город/домен) с зарплатами, форматами и топами навыков.
 - `reports/figures/*.png` — визуализации зарплат, форматов работы, навыковых тепловых карт и распределений.
 - `scripts/run_pipeline.py`, `scripts/validate_notebook.py` — точки входа для воспроизводимости.
 
