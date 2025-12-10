@@ -21,6 +21,14 @@ dist/
 
 # Notebook and IDE
 .ipynb_checkpoints/
+.pyre/
+.dmypy.json
+
+# Logs and datasets
+*.log
+data/
+
+# OS files
 .DS_Store
 .idea/
 .vscode/
