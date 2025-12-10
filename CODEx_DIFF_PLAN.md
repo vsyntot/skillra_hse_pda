@@ -123,7 +123,7 @@
 
 ## 3. EDA по работодателям, бенефитам и soft‑skills
 
-**Цель:** использовать идеи из `Group_project_draft.ipynb`.
+**Цель:** использовать идеи из `notebooks/Group_project_draft.ipynb`.
 
 ### 3.1. `src/skillra_pda/eda.py`
 
@@ -163,7 +163,7 @@
 
 - «Топ работодатели, бенефиты и soft‑skills»:
   - таблица `top_employers`,
-  - 1–2 heatmap (бенефиты и/или soft),
+  - 2 heatmap (бенефиты и soft),
   - выводы (кто щедр на бенефиты, кто требует soft‑skills, видно ли связь с зарплатами).
 
 ---
