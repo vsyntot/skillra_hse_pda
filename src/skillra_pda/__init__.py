@@ -35,7 +35,7 @@ from .personas import (  # noqa: F401
     build_skill_demand_profile,
     skill_gap_for_persona,
 )
-from .viz import skill_heatmap  # noqa: F401
+from .viz import salary_by_domain_plot, skill_heatmap  # noqa: F401
 
 __all__ = [
     "cleaning",
@@ -66,6 +66,7 @@ __all__ = [
     "correlation_matrix",
     "skill_frequency",
     "skill_share_by_grade",
+    "salary_by_domain_plot",
     "skill_heatmap",
     "ensure_expected_feature_columns",
     "Persona",
