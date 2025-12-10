@@ -1,4 +1,5 @@
 """EDA helper functions."""
+
 from __future__ import annotations
 
 from typing import Iterable, List
@@ -9,6 +10,29 @@ import pandas as pd
 def missing_share(df: pd.DataFrame, top_n: int = 20) -> pd.Series:
     """Return top missing shares."""
     return df.isna().mean().sort_values(ascending=False).head(top_n)
+
+
+def top_employers(
+    df: pd.DataFrame,
+    top_n: int = 10,
+    employer_col: str = "company",
+    salary_col: str = "salary_mid_rub_capped",
+) -> pd.DataFrame:
+    """Return top employers with vacancy counts and median salary."""
+
+    required_cols = {employer_col, salary_col}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise KeyError(f"Ожидал колонки {missing} для top_employers")
+
+    grouped = (
+        df.groupby(employer_col)[salary_col]
+        .agg(vacancy_count="count", salary_median="median")
+        .sort_values(by="vacancy_count", ascending=False)
+        .head(top_n)
+        .reset_index()
+    )
+    return grouped
 
 
 def describe_salary_by_group(
@@ -360,6 +384,33 @@ def benefits_summary_by_company(
     return agg.reset_index()
 
 
+def benefits_by_employer(
+    df: pd.DataFrame,
+    top_n: int = 10,
+    employer_col: str = "company",
+) -> pd.DataFrame:
+    """Share of benefits per employer for top employers.
+
+    Returns a pivot with employers as index and benefit names as columns
+    (values are shares), suitable for heatmaps.
+    """
+
+    benefit_cols = [col for col in df.columns if col.startswith("benefit_")]
+    if not benefit_cols:
+        return pd.DataFrame()
+    if employer_col not in df.columns:
+        raise KeyError(f"Ожидал колонку {employer_col} для benefits_by_employer")
+
+    top_employer_index = df[employer_col].value_counts().head(top_n).index
+    subset = df[df[employer_col].isin(top_employer_index)].copy()
+    subset[benefit_cols] = subset[benefit_cols].fillna(False).astype(bool)
+
+    pivot = subset.groupby(employer_col)[benefit_cols].mean()
+    pivot = pivot.reindex(top_employer_index)
+    pivot.index.name = employer_col
+    return pivot
+
+
 def benefits_summary_by_grade(df: pd.DataFrame) -> pd.DataFrame:
     """Benefit availability by grade."""
 
@@ -393,18 +444,26 @@ def soft_skills_overall_stats(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def soft_skills_by_employer(df: pd.DataFrame, company_col: str = "company", top_n: int = 10) -> pd.DataFrame:
-    """Soft skill shares for top employers."""
+    """Share of soft skills per employer for top employers.
+
+    Returns a pivot with employers as index and soft skill names as columns
+    (values are shares), suitable for heatmaps.
+    """
 
     soft_cols = [col for col in df.columns if col.startswith("soft_")]
-    if not soft_cols or company_col not in df.columns:
+    if not soft_cols:
         return pd.DataFrame()
+    if company_col not in df.columns:
+        raise KeyError(f"Ожидал колонку {company_col} для soft_skills_by_employer")
 
     top_companies = df[company_col].value_counts().head(top_n).index
     subset = df[df[company_col].isin(top_companies)].copy()
     subset[soft_cols] = subset[soft_cols].fillna(False).astype(bool)
-    agg = subset.groupby(company_col)[soft_cols].mean()
-    agg["n_vacancies"] = subset.groupby(company_col).size()
-    return agg.reset_index()
+
+    pivot = subset.groupby(company_col)[soft_cols].mean()
+    pivot = pivot.reindex(top_companies)
+    pivot.index.name = company_col
+    return pivot
 
 
 def soft_skills_correlation(df: pd.DataFrame) -> pd.DataFrame:
@@ -437,6 +496,7 @@ def junior_friendly_share_by_segment(df: pd.DataFrame) -> pd.DataFrame:
 
 __all__ = [
     "missing_share",
+    "top_employers",
     "describe_salary_by_group",
     "describe_salary_two_dim",
     "salary_summary_by_category",
@@ -457,6 +517,7 @@ __all__ = [
     "salary_summary_by_role_and_work_mode",
     "remote_share_by_role",
     "benefits_summary_by_company",
+    "benefits_by_employer",
     "benefits_summary_by_grade",
     "soft_skills_overall_stats",
     "soft_skills_by_employer",
