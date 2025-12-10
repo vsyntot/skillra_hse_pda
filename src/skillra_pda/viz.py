@@ -175,6 +175,121 @@ def salary_mean_and_count_bar(
     return _save_fig(fig, filename)
 
 
+def salary_by_city_mean_count_plot(
+    df: pd.DataFrame,
+    salary_col: str = "salary_mid_rub_capped",
+    top_n: int = 10,
+    figsize: tuple[int, int] = (10, 6),
+) -> Path:
+    """Wrapper for salary mean/count by city tier."""
+
+    return salary_mean_and_count_bar(
+        df,
+        category_col="city_tier",
+        salary_col=salary_col,
+        top_n=top_n,
+        figsize=figsize,
+        output_path=FIGURES_DIR / "fig_salary_by_city_mean_count.png",
+    )
+
+
+def salary_by_grade_mean_count_plot(
+    df: pd.DataFrame,
+    salary_col: str = "salary_mid_rub_capped",
+    top_n: int = 10,
+    figsize: tuple[int, int] = (10, 6),
+) -> Path:
+    """Wrapper for salary mean/count by grade."""
+
+    return salary_mean_and_count_bar(
+        df,
+        category_col="grade",
+        salary_col=salary_col,
+        top_n=top_n,
+        figsize=figsize,
+        output_path=FIGURES_DIR / "fig_salary_by_grade_mean_count.png",
+    )
+
+
+def salary_by_primary_role_mean_count_plot(
+    df: pd.DataFrame,
+    salary_col: str = "salary_mid_rub_capped",
+    top_n: int = 10,
+    figsize: tuple[int, int] = (10, 6),
+) -> Path:
+    """Wrapper for salary mean/count by primary role."""
+
+    return salary_mean_and_count_bar(
+        df,
+        category_col="primary_role",
+        salary_col=salary_col,
+        top_n=top_n,
+        figsize=figsize,
+        output_path=FIGURES_DIR / "fig_salary_by_primary_role_mean_count.png",
+    )
+
+
+def salary_by_employer_rating_plot(
+    df: pd.DataFrame,
+    salary_col: str = "salary_mid_rub_capped",
+    top_n: int = 10,
+    figsize: tuple[int, int] = (10, 6),
+) -> Path:
+    """Wrapper for salary mean/count by employer rating buckets."""
+
+    return salary_mean_and_count_bar(
+        df,
+        category_col="employer_rating",
+        salary_col=salary_col,
+        top_n=top_n,
+        figsize=figsize,
+        output_path=FIGURES_DIR / "fig_salary_by_employer_rating_mean_count.png",
+    )
+
+
+def salary_by_english_level_plot(
+    df: pd.DataFrame,
+    salary_col: str = "salary_mid_rub_capped",
+    top_n: int = 10,
+    figsize: tuple[int, int] = (10, 6),
+) -> Path:
+    """Wrapper for salary mean/count by English level."""
+
+    return salary_mean_and_count_bar(
+        df,
+        category_col="lang_english_level",
+        salary_col=salary_col,
+        top_n=top_n,
+        figsize=figsize,
+        output_path=FIGURES_DIR / "fig_salary_by_english_level_mean_count.png",
+    )
+
+
+def salary_by_skills_bucket_plot(
+    df: pd.DataFrame,
+    salary_col: str = "salary_mid_rub_capped",
+    top_n: int = 10,
+    figsize: tuple[int, int] = (10, 6),
+) -> Path:
+    """Wrapper for salary mean/count by tech stack size buckets."""
+
+    category_col = "tech_stack_size"
+    _require_columns(df, [category_col], "salary_by_skills_bucket_plot")
+    # Bin stack size for readability
+    bins = [-1, 2, 5, 10, df[category_col].max()] if not df[category_col].isna().all() else [-1, 0, 1]
+    labels = ["0-2", "3-5", "6-10", "10+"] if len(bins) == 4 else ["0-1", "1+"]
+    df_local = df.copy()
+    df_local["stack_bucket"] = pd.cut(df_local[category_col].fillna(0), bins=bins, labels=labels, include_lowest=True)
+    return salary_mean_and_count_bar(
+        df_local,
+        category_col="stack_bucket",
+        salary_col=salary_col,
+        top_n=top_n,
+        figsize=figsize,
+        output_path=FIGURES_DIR / "fig_salary_by_skills_bucket_mean_count.png",
+    )
+
+
 def heatmap_skills_by_grade(
     skill_share: pd.DataFrame, figsize: tuple[int, int] = (10, 6), output_path: Path | None = None
 ) -> Path:
