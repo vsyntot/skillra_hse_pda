@@ -31,7 +31,7 @@ def main() -> None:
         dtype_before = "missing"
         unwanted_before = 0
 
-    df_features = features.engineer_all_features(df.copy())
+    df_features = features.assemble_features(df.copy())
 
     try:
         io.save_processed(df, clean_path)

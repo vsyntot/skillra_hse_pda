@@ -47,7 +47,7 @@ def salary_summary_by_category(
     if category_col not in df.columns:
         raise ValueError(f"expected column {category_col} for salary_summary_by_category")
     return (
-        df.groupby(category_col, observed=True)[salary_col]
+        df.groupby(category_col)[salary_col]
         .agg(n="count", median="median", mean="mean", std="std")
         .reset_index()
         .sort_values(by="median", ascending=False)
@@ -104,6 +104,42 @@ def salary_by_stack_size(
     return salary_summary_by_category(temp, "tech_stack_bin", salary_col)
 
 
+def describe_salary_by_domain(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped") -> pd.DataFrame:
+    """Summarize salary metrics by primary domain derived from domain_* columns."""
+
+    if salary_col not in df.columns:
+        raise ValueError(f"expected column {salary_col} for describe_salary_by_domain")
+
+    domain_cols = sorted([col for col in df.columns if col.startswith("domain_")])
+    if not domain_cols:
+        return pd.DataFrame()
+
+    domain_flags = df[domain_cols].fillna(False).astype(bool)
+
+    def _primary_domain(row: pd.Series) -> str:
+        for col in domain_cols:
+            if bool(row[col]):
+                return col.replace("domain_", "")
+        return "unknown"
+
+    temp = df.copy()
+    temp["domain"] = domain_flags.apply(_primary_domain, axis=1)
+
+    grouped = (
+        temp.groupby("domain")[salary_col]
+        .agg(
+            vacancy_count="count",
+            salary_median="median",
+            salary_q25=lambda s: s.quantile(0.25),
+            salary_q75=lambda s: s.quantile(0.75),
+        )
+        .reset_index()
+    )
+    total = len(temp)
+    grouped["share"] = grouped["vacancy_count"] / total if total else 0
+    return grouped.sort_values(by="vacancy_count", ascending=False)
+
+
 def correlation_matrix(df: pd.DataFrame, cols: Iterable[str] | None = None) -> pd.DataFrame:
     """Compute Pearson correlation matrix for numeric columns."""
     if cols is None:
@@ -148,63 +184,6 @@ def skill_share_by_grade(
     return pivot
 
 
-def build_skill_demand_profile(
-    df_features: pd.DataFrame,
-    role: str | None,
-    grade: str | None,
-    role_col: str = "primary_role",
-    grade_col: str = "grade",
-    skill_cols: list[str] | None = None,
-    skill_prefixes: tuple[str, ...] = ("skill_", "has_"),
-) -> pd.DataFrame:
-    """Return per-skill shares for the requested role/grade slice.
-
-    The function validates presence of the role/grade columns (if role/grade filters
-    were provided), filters the dataset, and aggregates boolean skill columns into
-    a frequency table sorted by share descending.
-    """
-
-    required_columns: list[str] = []
-    if role is not None:
-        required_columns.append(role_col)
-    if grade is not None:
-        required_columns.append(grade_col)
-
-    missing_cols = [col for col in required_columns if col not in df_features.columns]
-    if missing_cols:
-        raise KeyError(f"Ожидал колонки {missing_cols} для build_skill_demand_profile")
-
-    filtered = df_features.copy()
-    if role is not None and role_col in filtered.columns:
-        filtered = filtered[
-            filtered[role_col].fillna("").str.lower() == (role or "").lower()
-        ]
-    if grade is not None and grade_col in filtered.columns:
-        filtered = filtered[
-            filtered[grade_col].fillna("").str.lower() == (grade or "").lower()
-        ]
-
-    if skill_cols is None:
-        skill_cols = [col for col in filtered.columns if col.startswith(skill_prefixes)]
-    else:
-        skill_cols = [col for col in skill_cols if col in filtered.columns]
-
-    if filtered.empty or not skill_cols:
-        return pd.DataFrame(columns=["skill", "market_share", "count"])
-
-    skills_bool = filtered[skill_cols].fillna(False).astype(bool)
-    share = skills_bool.mean()
-    count = skills_bool.sum()
-    profile = (
-        pd.DataFrame(
-            {"skill": share.index, "market_share": share.values, "count": count.values}
-        )
-        .sort_values(by=["market_share", "count"], ascending=False)
-        .reset_index(drop=True)
-    )
-    return profile
-
-
 def junior_friendly_share(df: pd.DataFrame, group_col: str = "primary_role") -> pd.DataFrame:
     """Share of junior-friendly and battle-experience flags by the requested category."""
 
@@ -217,7 +196,7 @@ def junior_friendly_share(df: pd.DataFrame, group_col: str = "primary_role") -> 
 
     subset = df[[group_col] + target_flags].copy()
     subset[target_flags] = subset[target_flags].fillna(False).astype(bool)
-    grouped = subset.groupby(group_col, observed=True)[target_flags].mean().reset_index()
+    grouped = subset.groupby(group_col)[target_flags].mean().reset_index()
     return grouped
 
 
@@ -365,6 +344,7 @@ __all__ = [
     "describe_salary_by_group",
     "describe_salary_two_dim",
     "salary_summary_by_category",
+    "describe_salary_by_domain",
     "salary_by_city_tier",
     "salary_by_grade",
     "salary_by_primary_role",
@@ -375,7 +355,6 @@ __all__ = [
     "top_value_counts",
     "skill_frequency",
     "skill_share_by_grade",
-    "build_skill_demand_profile",
     "junior_friendly_share",
     "salary_summary_by_grade_and_city",
     "salary_summary_by_role_and_work_mode",

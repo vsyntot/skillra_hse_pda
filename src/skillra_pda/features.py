@@ -77,12 +77,8 @@ ML_STACK_SKILLS = [
 ]
 
 
-def add_time_features(
-    df: pd.DataFrame, date_col: str = "published_at_iso", recency_threshold_days: int = 30
-) -> pd.DataFrame:
-    """Add weekday/month/is_weekend flags, vacancy age, and recency indicator."""
-
-    df = df.copy()
+def add_time_features(df: pd.DataFrame, date_col: str = "published_at_iso") -> pd.DataFrame:
+    """Add weekday/month/is_weekend flags from the publication date and vacancy age."""
     if date_col in df.columns:
         dt = pd.to_datetime(df[date_col], errors="coerce")
         df["published_weekday"] = dt.dt.weekday
@@ -94,24 +90,12 @@ def add_time_features(
         df["published_month"] = pd.NA
         df["is_weekend_post"] = pd.NA
 
-    vacancy_age = None
-    if "vacancy_age_days" in df.columns:
-        vacancy_age = pd.to_numeric(df["vacancy_age_days"], errors="coerce")
-    elif "scraped_at_utc" in df.columns and date_col in df.columns:
+    if "scraped_at_utc" in df.columns and date_col in df.columns:
         scraped = pd.to_datetime(df["scraped_at_utc"], errors="coerce", utc=True).dt.tz_convert(None)
         published = pd.to_datetime(df[date_col], errors="coerce", utc=True).dt.tz_convert(None)
-        vacancy_age = (scraped - published).dt.days
-
-    if vacancy_age is not None:
-        df["vacancy_age_days"] = vacancy_age
-        df["is_recent"] = (
-            vacancy_age.le(recency_threshold_days)
-            .where(~vacancy_age.isna(), pd.NA)
-            .astype("boolean")
-        )
+        df["vacancy_age_days"] = (scraped - published).dt.days
     else:
         df["vacancy_age_days"] = pd.NA
-        df["is_recent"] = pd.NA
     return df
 
 
@@ -326,9 +310,6 @@ def compute_skill_premium(
 def ensure_expected_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Backfill core derived columns with safe defaults if missing."""
 
-    def _bool_na_series() -> pd.Series:
-        return pd.Series(pd.NA, index=df.index, dtype="boolean")
-
     expected_defaults = {
         "published_weekday": pd.NA,
         "city_tier": "unknown",
@@ -336,27 +317,25 @@ def ensure_expected_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
         "primary_role": "other",
         "salary_bucket": pd.NA,
         "vacancy_age_days": pd.NA,
-        "is_recent": _bool_na_series,
         "core_data_skills_count": 0,
         "ml_stack_count": 0,
         "tech_stack_size": 0,
         "benefits_count": 0,
         "soft_skills_count": 0,
         "role_count": 0,
-        "is_junior_friendly": _bool_na_series,
-        "battle_experience": _bool_na_series,
+        "is_junior_friendly": pd.NA,
+        "battle_experience": pd.NA,
     }
     for col, default in expected_defaults.items():
         if col not in df.columns:
-            df[col] = default() if callable(default) else default
+            df[col] = default
     return df
 
 
-def engineer_all_features(df: pd.DataFrame, recency_threshold_days: int = 30) -> pd.DataFrame:
-    """Run the full feature-engineering pipeline in the planned order."""
-
+def assemble_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Convenience pipeline for feature dataframe."""
     grouped = detect_column_groups(df)
-    df = add_time_features(df, recency_threshold_days=recency_threshold_days)
+    df = add_time_features(df)
     df = add_city_tier(df)
     df = add_work_mode(df)
     df = add_boolean_counts(df, groups=grouped)
@@ -366,8 +345,3 @@ def engineer_all_features(df: pd.DataFrame, recency_threshold_days: int = 30) ->
     df = add_salary_bucket(df)
     df = add_structured_text_features(df)
     return ensure_expected_feature_columns(df)
-
-
-def assemble_features(df: pd.DataFrame, recency_threshold_days: int = 30) -> pd.DataFrame:
-    """Convenience pipeline for feature dataframe."""
-    return engineer_all_features(df, recency_threshold_days=recency_threshold_days)

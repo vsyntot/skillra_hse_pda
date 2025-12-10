@@ -26,7 +26,7 @@ def main() -> None:
     df_clean = cleaning.deduplicate(df_clean)
     io.save_processed(df_clean, clean_path)
 
-    df_features = features.engineer_all_features(df_clean.copy())
+    df_features = features.assemble_features(df_clean.copy())
     io.save_processed(df_features, feature_path)
 
     print(f"Saved clean dataset to {clean_path}")

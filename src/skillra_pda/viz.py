@@ -290,6 +290,31 @@ def salary_by_skills_bucket_plot(
     )
 
 
+def salary_by_domain_plot(df: pd.DataFrame, top_n: int = 10, savepath: Path | None = None) -> Path:
+    """Barplot of median salary by domain with vacancy counts on a twin axis."""
+
+    from . import eda as eda_mod
+
+    summary = eda_mod.describe_salary_by_domain(df)
+    if summary.empty:
+        raise ValueError("salary_by_domain_plot: expected domain_* columns and salary data")
+
+    top = summary.sort_values(by="vacancy_count", ascending=False).head(top_n)
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+    ax1.bar(top["domain"], top["salary_median"], color="steelblue")
+    ax1.set_ylabel("Median salary (RUB)")
+    ax1.set_xlabel("Domain")
+    ax1.tick_params(axis="x", rotation=45, labelrotation=45)
+
+    ax2 = ax1.twinx()
+    ax2.plot(top["domain"], top["vacancy_count"], color="darkorange", marker="o")
+    ax2.set_ylabel("Vacancy count")
+
+    ax1.set_title("Salary by domain")
+    filename = savepath or FIGURES_DIR / "fig_salary_by_domain.png"
+    return _save_fig(fig, filename)
+
+
 def heatmap_skills_by_grade(
     skill_share: pd.DataFrame, figsize: tuple[int, int] = (10, 6), output_path: Path | None = None
 ) -> Path:
