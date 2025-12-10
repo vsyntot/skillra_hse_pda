@@ -14,6 +14,8 @@ class Persona:
 
     name: str
     description: str
+    goals: List[str] = field(default_factory=list)
+    limitations: List[str] = field(default_factory=list)
     current_skills: List[str]
     target_role: str
     target_grade: str | None = None
@@ -138,7 +140,13 @@ def skill_gap_for_persona(
 
 
 def analyze_persona(df: pd.DataFrame, persona: Persona, top_k: int = 10) -> dict:
-    """Summarize market segment and skill gaps for a persona."""
+    """Summarize market segment and skill gaps for a persona.
+
+    Returns a dictionary with three core blocks:
+    * ``market_summary`` — aggregated metrics for the target segment;
+    * ``skill_gap`` — dataframe with market share, persona possession and gap flag;
+    * ``recommended_skills`` — ordered list of missing skills to focus on.
+    """
 
     df_filtered = _filter_by_target(df, persona)
     market_summary: dict[str, object] = {
@@ -160,6 +168,11 @@ def analyze_persona(df: pd.DataFrame, persona: Persona, top_k: int = 10) -> dict
             df_filtered["is_junior_friendly"].fillna(False).astype(bool).mean()
         )
 
+    demand_df = build_skill_demand_profile(
+        df_filtered, persona, skill_prefixes=("has_", "skill_"), min_share=0.05
+    )
+    top_demand = demand_df.head(top_k) if not demand_df.empty else pd.DataFrame()
+
     gap_df = skill_gap_for_persona(df_filtered, persona, min_share=0.05, top_n=top_k)
     recommended_skills: list[str] = gap_df.loc[gap_df["gap"], "skill_name"].head(top_k).tolist()
 
@@ -167,6 +180,7 @@ def analyze_persona(df: pd.DataFrame, persona: Persona, top_k: int = 10) -> dict
         "market_summary": market_summary,
         "skill_gap": gap_df,
         "recommended_skills": recommended_skills,
+        "top_skill_demand": top_demand,
     }
 
 
@@ -202,6 +216,11 @@ def plot_persona_skill_gap(gap_df: pd.DataFrame, persona: Persona, output_dir: P
 DATA_STUDENT = Persona(
     name="data_student",
     description="Магистрант по данным, целится в Junior DA/DS",
+    goals=[
+        "Получить первую роль Junior DA/DS",
+        "Подтянуть Python/SQL и продуктовую аналитику",
+    ],
+    limitations=["Неполная занятость из-за учёбы", "Ориентация на remote"],
     current_skills=["skill_sql", "skill_excel", "has_python"],
     target_role="analyst",
     target_grade="junior",
@@ -212,6 +231,8 @@ DATA_STUDENT = Persona(
 SWITCHER_BI = Persona(
     name="switcher_bi",
     description="Свитчер в продуктовую/BI-аналитику",
+    goals=["Перейти из смежной сферы в BI/продуктовую аналитику"],
+    limitations=["Нужно быстро выйти на работу", "Ставка на гибрид или офис"],
     current_skills=["skill_excel", "skill_powerbi"],
     target_role="product",
     target_grade="junior",
@@ -222,6 +243,8 @@ SWITCHER_BI = Persona(
 MID_DATA_ANALYST = Persona(
     name="mid_data_analyst",
     description="Middle аналитик, хочет усилить hard-стек",
+    goals=["Выйти на позиции middle+", "Усилить ML/продвинутое моделирование"],
+    limitations=["Рассматривает офис/гибрид", "Хочет рост зарплаты"],
     current_skills=["skill_sql", "skill_excel", "skill_powerbi"],
     target_role="analyst",
     target_grade="middle",
