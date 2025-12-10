@@ -326,6 +326,9 @@ def compute_skill_premium(
 def ensure_expected_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Backfill core derived columns with safe defaults if missing."""
 
+    def _bool_na_series() -> pd.Series:
+        return pd.Series(pd.NA, index=df.index, dtype="boolean")
+
     expected_defaults = {
         "published_weekday": pd.NA,
         "city_tier": "unknown",
@@ -333,27 +336,27 @@ def ensure_expected_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
         "primary_role": "other",
         "salary_bucket": pd.NA,
         "vacancy_age_days": pd.NA,
-        "is_recent": pd.NA,
+        "is_recent": _bool_na_series,
         "core_data_skills_count": 0,
         "ml_stack_count": 0,
         "tech_stack_size": 0,
         "benefits_count": 0,
         "soft_skills_count": 0,
         "role_count": 0,
-        "is_junior_friendly": pd.NA,
-        "battle_experience": pd.NA,
+        "is_junior_friendly": _bool_na_series,
+        "battle_experience": _bool_na_series,
     }
     for col, default in expected_defaults.items():
         if col not in df.columns:
-            df[col] = default
+            df[col] = default() if callable(default) else default
     return df
 
 
-def engineer_all_features(df: pd.DataFrame) -> pd.DataFrame:
+def engineer_all_features(df: pd.DataFrame, recency_threshold_days: int = 30) -> pd.DataFrame:
     """Run the full feature-engineering pipeline in the planned order."""
 
     grouped = detect_column_groups(df)
-    df = add_time_features(df)
+    df = add_time_features(df, recency_threshold_days=recency_threshold_days)
     df = add_city_tier(df)
     df = add_work_mode(df)
     df = add_boolean_counts(df, groups=grouped)
@@ -365,6 +368,6 @@ def engineer_all_features(df: pd.DataFrame) -> pd.DataFrame:
     return ensure_expected_feature_columns(df)
 
 
-def assemble_features(df: pd.DataFrame) -> pd.DataFrame:
+def assemble_features(df: pd.DataFrame, recency_threshold_days: int = 30) -> pd.DataFrame:
     """Convenience pipeline for feature dataframe."""
-    return engineer_all_features(df)
+    return engineer_all_features(df, recency_threshold_days=recency_threshold_days)
