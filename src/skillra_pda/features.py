@@ -37,6 +37,8 @@ CITY_MILLION_PLUS = {
     "воронеж",
     "volgograd",
     "волгоград",
+    "krasnodar",
+    "краснодар",
 }
 
 PRIMARY_ROLE_PRIORITY = [
@@ -128,9 +130,11 @@ def add_work_mode(df: pd.DataFrame) -> pd.DataFrame:
         work_format = row.get("work_format")
         if isinstance(work_format, str) and work_format in {"remote", "hybrid", "office", "field"}:
             return work_format
-        if bool(row.get("is_remote")):
+        remote_flag = row.get("is_remote")
+        hybrid_flag = row.get("is_hybrid")
+        if isinstance(remote_flag, (bool, np.bool_)) and remote_flag:
             return "remote"
-        if bool(row.get("is_hybrid")):
+        if isinstance(hybrid_flag, (bool, np.bool_)) and hybrid_flag:
             return "hybrid"
         return "unknown"
 
