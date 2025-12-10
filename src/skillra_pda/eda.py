@@ -1,5 +1,4 @@
 """EDA helper functions."""
-
 from __future__ import annotations
 
 from typing import Iterable, List
@@ -10,29 +9,6 @@ import pandas as pd
 def missing_share(df: pd.DataFrame, top_n: int = 20) -> pd.Series:
     """Return top missing shares."""
     return df.isna().mean().sort_values(ascending=False).head(top_n)
-
-
-def top_employers(
-    df: pd.DataFrame,
-    top_n: int = 10,
-    employer_col: str = "company",
-    salary_col: str = "salary_mid_rub_capped",
-) -> pd.DataFrame:
-    """Return top employers with vacancy counts and median salary."""
-
-    required_cols = {employer_col, salary_col}
-    missing = required_cols - set(df.columns)
-    if missing:
-        raise KeyError(f"Ожидал колонки {missing} для top_employers")
-
-    grouped = (
-        df.groupby(employer_col)[salary_col]
-        .agg(vacancy_count="count", salary_median="median")
-        .sort_values(by="vacancy_count", ascending=False)
-        .head(top_n)
-        .reset_index()
-    )
-    return grouped
 
 
 def describe_salary_by_group(
@@ -164,61 +140,6 @@ def describe_salary_by_domain(df: pd.DataFrame, salary_col: str = "salary_mid_ru
     return grouped.sort_values(by="vacancy_count", ascending=False)
 
 
-def english_requirement_stats(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped") -> pd.DataFrame:
-    """Normalize English requirements and summarize salary/availability by level."""
-
-    if salary_col not in df.columns:
-        raise KeyError(f"Ожидал колонку {salary_col} для english_requirement_stats")
-
-    level_mapping = {
-        "none": "no_english",
-        "": "no_english",
-        "basic": "A2",
-        "a2": "A2",
-        "intermediate": "B1",
-        "b1": "B1",
-        "upper_intermediate": "B2",
-        "b2": "B2",
-        "advanced": "C1_plus",
-        "fluent": "C1_plus",
-        "c1": "C1_plus",
-        "c2": "C1_plus",
-    }
-
-    def normalize_level(raw: object) -> str | None:
-        if raw is None or (isinstance(raw, float) and pd.isna(raw)):
-            return None
-        text = str(raw).strip().lower()
-        return level_mapping.get(text, None)
-
-    has_level = "lang_english_level" in df.columns
-    has_required = "lang_english_required" in df.columns
-
-    temp = df.copy()
-    if has_level:
-        temp["english_level"] = df["lang_english_level"].apply(normalize_level)
-    else:
-        temp["english_level"] = None
-
-    if has_required:
-        required = df["lang_english_required"].fillna(False).astype(bool)
-        temp.loc[~required & temp["english_level"].isna(), "english_level"] = "no_english"
-        temp.loc[required & temp["english_level"].isna(), "english_level"] = "B1"
-
-    temp["english_level"] = temp["english_level"].fillna("no_english")
-
-    grouped = (
-        temp.groupby("english_level")[salary_col]
-        .agg(vacancy_count="count", salary_median="median")
-        .reset_index()
-    )
-    total = len(temp)
-    grouped["share"] = grouped["vacancy_count"] / total if total else 0
-    return grouped[["english_level", "vacancy_count", "share", "salary_median"]].sort_values(
-        by="vacancy_count", ascending=False
-    )
-
-
 def correlation_matrix(df: pd.DataFrame, cols: Iterable[str] | None = None) -> pd.DataFrame:
     """Compute Pearson correlation matrix for numeric columns."""
     if cols is None:
@@ -277,47 +198,6 @@ def junior_friendly_share(df: pd.DataFrame, group_col: str = "primary_role") -> 
     subset[target_flags] = subset[target_flags].fillna(False).astype(bool)
     grouped = subset.groupby(group_col)[target_flags].mean().reset_index()
     return grouped
-
-
-def education_requirement_stats(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped") -> pd.DataFrame:
-    """Bucket education requirements and summarize vacancy availability and salary."""
-
-    if salary_col not in df.columns:
-        raise KeyError(f"Ожидал колонку {salary_col} для education_requirement_stats")
-
-    has_required = "edu_required" in df.columns
-    has_level = "edu_level" in df.columns
-    technical_flags = [col for col in ["edu_technical", "edu_math_or_cs"] if col in df.columns]
-
-    def decide_bucket(row: pd.Series) -> str:
-        required = bool(row.get("edu_required", False)) if has_required else False
-        level_raw = row.get("edu_level") if has_level else None
-        level = str(level_raw).strip().lower() if isinstance(level_raw, str) else None
-        technical = any(bool(row.get(col, False)) for col in technical_flags)
-
-        if not required or level == "none":
-            return "no_degree_required"
-        if level in {None, ""}:
-            return "any_degree"
-        if level in {"master_or_higher", "master", "phd", "candidate", "doctoral"}:
-            return "master_phd"
-        if technical:
-            return "technical_only"
-        return "any_degree"
-
-    temp = df.copy()
-    temp["education_requirement"] = temp.apply(decide_bucket, axis=1)
-
-    grouped = (
-        temp.groupby("education_requirement")[salary_col]
-        .agg(vacancy_count="count", salary_median="median")
-        .reset_index()
-    )
-    total = len(temp)
-    grouped["share"] = grouped["vacancy_count"] / total if total else 0
-    return grouped[["education_requirement", "vacancy_count", "share", "salary_median"]].sort_values(
-        by="vacancy_count", ascending=False
-    )
 
 
 def salary_summary_by_grade_and_city(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped") -> pd.DataFrame:
@@ -384,33 +264,6 @@ def benefits_summary_by_company(
     return agg.reset_index()
 
 
-def benefits_by_employer(
-    df: pd.DataFrame,
-    top_n: int = 10,
-    employer_col: str = "company",
-) -> pd.DataFrame:
-    """Share of benefits per employer for top employers.
-
-    Returns a pivot with employers as index and benefit names as columns
-    (values are shares), suitable for heatmaps.
-    """
-
-    benefit_cols = [col for col in df.columns if col.startswith("benefit_")]
-    if not benefit_cols:
-        return pd.DataFrame()
-    if employer_col not in df.columns:
-        raise KeyError(f"Ожидал колонку {employer_col} для benefits_by_employer")
-
-    top_employer_index = df[employer_col].value_counts().head(top_n).index
-    subset = df[df[employer_col].isin(top_employer_index)].copy()
-    subset[benefit_cols] = subset[benefit_cols].fillna(False).astype(bool)
-
-    pivot = subset.groupby(employer_col)[benefit_cols].mean()
-    pivot = pivot.reindex(top_employer_index)
-    pivot.index.name = employer_col
-    return pivot
-
-
 def benefits_summary_by_grade(df: pd.DataFrame) -> pd.DataFrame:
     """Benefit availability by grade."""
 
@@ -444,26 +297,18 @@ def soft_skills_overall_stats(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def soft_skills_by_employer(df: pd.DataFrame, company_col: str = "company", top_n: int = 10) -> pd.DataFrame:
-    """Share of soft skills per employer for top employers.
-
-    Returns a pivot with employers as index and soft skill names as columns
-    (values are shares), suitable for heatmaps.
-    """
+    """Soft skill shares for top employers."""
 
     soft_cols = [col for col in df.columns if col.startswith("soft_")]
-    if not soft_cols:
+    if not soft_cols or company_col not in df.columns:
         return pd.DataFrame()
-    if company_col not in df.columns:
-        raise KeyError(f"Ожидал колонку {company_col} для soft_skills_by_employer")
 
     top_companies = df[company_col].value_counts().head(top_n).index
     subset = df[df[company_col].isin(top_companies)].copy()
     subset[soft_cols] = subset[soft_cols].fillna(False).astype(bool)
-
-    pivot = subset.groupby(company_col)[soft_cols].mean()
-    pivot = pivot.reindex(top_companies)
-    pivot.index.name = company_col
-    return pivot
+    agg = subset.groupby(company_col)[soft_cols].mean()
+    agg["n_vacancies"] = subset.groupby(company_col).size()
+    return agg.reset_index()
 
 
 def soft_skills_correlation(df: pd.DataFrame) -> pd.DataFrame:
@@ -496,7 +341,6 @@ def junior_friendly_share_by_segment(df: pd.DataFrame) -> pd.DataFrame:
 
 __all__ = [
     "missing_share",
-    "top_employers",
     "describe_salary_by_group",
     "describe_salary_two_dim",
     "salary_summary_by_category",
@@ -507,7 +351,6 @@ __all__ = [
     "salary_by_experience_bucket",
     "salary_by_english_level",
     "salary_by_stack_size",
-    "english_requirement_stats",
     "correlation_matrix",
     "top_value_counts",
     "skill_frequency",
@@ -517,11 +360,9 @@ __all__ = [
     "salary_summary_by_role_and_work_mode",
     "remote_share_by_role",
     "benefits_summary_by_company",
-    "benefits_by_employer",
     "benefits_summary_by_grade",
     "soft_skills_overall_stats",
     "soft_skills_by_employer",
     "soft_skills_correlation",
     "junior_friendly_share_by_segment",
-    "education_requirement_stats",
 ]

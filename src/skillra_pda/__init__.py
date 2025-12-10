@@ -8,8 +8,6 @@ from .eda import (  # noqa: F401
     benefits_summary_by_grade,
     correlation_matrix,
     describe_salary_by_domain,
-    education_requirement_stats,
-    english_requirement_stats,
     junior_friendly_share,
     junior_friendly_share_by_segment,
     salary_by_city_tier,
@@ -28,7 +26,15 @@ from .eda import (  # noqa: F401
     soft_skills_overall_stats,
 )
 from .features import ensure_expected_feature_columns  # noqa: F401
-from .personas import Persona  # noqa: F401
+from .personas import (  # noqa: F401
+    DATA_STUDENT,
+    MID_DATA_ANALYST,
+    Persona,
+    SWITCHER_BI,
+    analyze_persona,
+    build_skill_demand_profile,
+    skill_gap_for_persona,
+)
 from .viz import skill_heatmap  # noqa: F401
 
 __all__ = [
@@ -47,7 +53,6 @@ __all__ = [
     "salary_by_grade",
     "salary_by_primary_role",
     "salary_by_stack_size",
-    "english_requirement_stats",
     "salary_by_english_level",
     "salary_summary_by_category",
     "describe_salary_by_domain",
@@ -61,8 +66,13 @@ __all__ = [
     "correlation_matrix",
     "skill_frequency",
     "skill_share_by_grade",
-    "education_requirement_stats",
     "skill_heatmap",
     "ensure_expected_feature_columns",
     "Persona",
+    "analyze_persona",
+    "build_skill_demand_profile",
+    "skill_gap_for_persona",
+    "DATA_STUDENT",
+    "SWITCHER_BI",
+    "MID_DATA_ANALYST",
 ]

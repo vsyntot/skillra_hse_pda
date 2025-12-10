@@ -1,29 +1,73 @@
-"""Product-oriented persona utilities."""
+"""Product-oriented persona utilities for Skillra."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List, Mapping
 
 import pandas as pd
 
 
 @dataclass
 class Persona:
-    """Persona definition for skill-gap analysis."""
+    """Persona definition for skill-gap and market analysis."""
 
     name: str
     description: str
     current_skills: List[str]
-    target_filter: Dict[str, object] = field(default_factory=dict)
+    target_role: str
+    target_grade: str | None = None
+    target_city_tier: str | None = None
+    target_work_mode: str | None = None
+    constraints: Dict[str, object] = field(default_factory=dict)
+
+    # Backward compatibility: expose target_filter as a property to avoid breaking old callers
+    @property
+    def target_filter(self) -> Dict[str, object]:  # pragma: no cover - legacy shim
+        filt: Dict[str, object] = {}
+        if self.target_role:
+            filt["primary_role"] = self.target_role
+        if self.target_grade:
+            filt["grade"] = self.target_grade
+        if self.target_city_tier:
+            filt["city_tier"] = self.target_city_tier
+        if self.target_work_mode:
+            filt["work_mode"] = self.target_work_mode
+        filt.update(self.constraints)
+        return filt
 
 
-__all__ = ["Persona", "skill_gap_for_persona", "plot_persona_skill_gap"]
+__all__ = [
+    "Persona",
+    "build_skill_demand_profile",
+    "skill_gap_for_persona",
+    "analyze_persona",
+    "plot_persona_skill_gap",
+    "DATA_STUDENT",
+    "SWITCHER_BI",
+    "MID_DATA_ANALYST",
+]
 
 
-def _filter_by_target(df: pd.DataFrame, target_filter: Dict[str, object]) -> pd.DataFrame:
+def _filter_by_target(df: pd.DataFrame, persona: Persona) -> pd.DataFrame:
+    """Filter a dataframe by persona targets and constraints."""
+
     filtered = df.copy()
-    for key, value in target_filter.items():
+    mapping: Mapping[str, Any] = {
+        "primary_role": persona.target_role,
+        "grade": persona.target_grade,
+        "city_tier": persona.target_city_tier,
+        "work_mode": persona.target_work_mode,
+    }
+    for col, value in mapping.items():
+        if value is None or col not in filtered.columns:
+            continue
+        if isinstance(value, (list, tuple, set)):
+            filtered = filtered[filtered[col].isin(value)]
+        else:
+            filtered = filtered[filtered[col] == value]
+
+    for key, value in persona.constraints.items():
         if key not in filtered.columns:
             continue
         if isinstance(value, (list, tuple, set)):
@@ -33,35 +77,97 @@ def _filter_by_target(df: pd.DataFrame, target_filter: Dict[str, object]) -> pd.
     return filtered
 
 
+def build_skill_demand_profile(
+    df: pd.DataFrame,
+    persona: Persona,
+    skill_prefixes: tuple[str, ...] = ("has_", "skill_"),
+    min_share: float = 0.05,
+) -> pd.DataFrame:
+    """Compute market demand for skills in the persona's target segment."""
+
+    df_filtered = _filter_by_target(df, persona)
+    if df_filtered.empty:
+        return pd.DataFrame(columns=["skill_name", "market_share"])
+
+    skill_cols = [c for c in df_filtered.columns if c.startswith(skill_prefixes)]
+    rows: list[dict[str, object]] = []
+    for col in skill_cols:
+        series = df_filtered[col].fillna(False)
+        try:
+            share = series.astype(bool).mean()
+        except Exception:
+            continue
+        if share < min_share:
+            continue
+        rows.append({"skill_name": col, "market_share": share})
+
+    demand = pd.DataFrame(rows)
+    if demand.empty:
+        return demand
+    return demand.sort_values(by="market_share", ascending=False).reset_index(drop=True)
+
+
 def skill_gap_for_persona(
-    df: pd.DataFrame, persona: Persona, skill_cols: List[str], min_share: float = 0.1
+    df: pd.DataFrame,
+    persona: Persona,
+    skill_cols: List[str] | None = None,
+    min_share: float = 0.1,
+    top_n: int | None = 20,
 ) -> pd.DataFrame:
     """
     Calculate market share of skills for persona targets and mark gaps.
 
-    Returns columns: skill_name, market_share, persona_has (0/1), gap (bool).
+    Returns columns: skill_name, market_share, persona_has (bool), gap (bool).
     """
 
-    df_filtered = _filter_by_target(df, persona.target_filter)
-    present_skills = [col for col in skill_cols if col in df_filtered.columns]
-    if not present_skills:
+    demand = build_skill_demand_profile(
+        df, persona, skill_prefixes=("has_", "skill_"), min_share=min_share
+    )
+    if skill_cols:
+        demand = demand[demand["skill_name"].isin(skill_cols)]
+
+    if demand.empty:
         return pd.DataFrame(columns=["skill_name", "market_share", "persona_has", "gap"])
 
-    rows: list[dict[str, object]] = []
-    for col in present_skills:
-        share = df_filtered[col].fillna(False).astype(bool).mean()
-        persona_has = 1 if col in persona.current_skills else 0
-        rows.append(
+    demand["persona_has"] = demand["skill_name"].isin(persona.current_skills)
+    demand["gap"] = ~demand["persona_has"] & (demand["market_share"] >= min_share)
+    demand_sorted = demand.sort_values(by="market_share", ascending=False)
+    if top_n is not None:
+        demand_sorted = demand_sorted.head(top_n)
+    return demand_sorted.reset_index(drop=True)
+
+
+def analyze_persona(df: pd.DataFrame, persona: Persona, top_k: int = 10) -> dict:
+    """Summarize market segment and skill gaps for a persona."""
+
+    df_filtered = _filter_by_target(df, persona)
+    market_summary: dict[str, object] = {
+        "vacancy_count": len(df_filtered),
+    }
+    salary_col = "salary_mid_rub_capped" if "salary_mid_rub_capped" in df_filtered.columns else None
+    if salary_col:
+        market_summary.update(
             {
-                "skill_name": col,
-                "market_share": share,
-                "persona_has": persona_has,
-                "gap": persona_has == 0 and share >= min_share,
+                "salary_median": df_filtered[salary_col].median(),
+                "salary_q25": df_filtered[salary_col].quantile(0.25),
+                "salary_q75": df_filtered[salary_col].quantile(0.75),
             }
         )
+    if "is_remote" in df_filtered.columns:
+        market_summary["remote_share"] = df_filtered["is_remote"].fillna(False).astype(bool).mean()
+    if "is_junior_friendly" in df_filtered.columns:
+        market_summary["junior_friendly_share"] = (
+            df_filtered["is_junior_friendly"].fillna(False).astype(bool).mean()
+        )
 
-    result = pd.DataFrame(rows)
-    return result.sort_values(by="market_share", ascending=False)
+    gap_df = skill_gap_for_persona(df_filtered, persona, min_share=0.05, top_n=top_k)
+    recommended_skills: list[str] = gap_df.loc[gap_df["gap"], "skill_name"].head(top_k).tolist()
+
+    return {
+        "market_summary": market_summary,
+        "skill_gap": gap_df,
+        "recommended_skills": recommended_skills,
+    }
 
 
 def plot_persona_skill_gap(gap_df: pd.DataFrame, persona: Persona, output_dir: Path | None = None) -> Path:
@@ -90,3 +196,35 @@ def plot_persona_skill_gap(gap_df: pd.DataFrame, persona: Persona, output_dir: P
     fig.savefig(output_path, dpi=200)
     plt.close(fig)
     return output_path
+
+
+# Pre-defined personas for quick experimentation in the notebook/product layer.
+DATA_STUDENT = Persona(
+    name="data_student",
+    description="Магистрант по данным, целится в Junior DA/DS",
+    current_skills=["skill_sql", "skill_excel", "has_python"],
+    target_role="analyst",
+    target_grade="junior",
+    target_city_tier="Moscow",
+    target_work_mode="remote",
+)
+
+SWITCHER_BI = Persona(
+    name="switcher_bi",
+    description="Свитчер в продуктовую/BI-аналитику",
+    current_skills=["skill_excel", "skill_powerbi"],
+    target_role="product",
+    target_grade="junior",
+    target_city_tier=None,
+    target_work_mode=None,
+)
+
+MID_DATA_ANALYST = Persona(
+    name="mid_data_analyst",
+    description="Middle аналитик, хочет усилить hard-стек",
+    current_skills=["skill_sql", "skill_excel", "skill_powerbi"],
+    target_role="analyst",
+    target_grade="middle",
+    target_city_tier=None,
+    target_work_mode=None,
+)
