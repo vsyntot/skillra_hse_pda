@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 from src.skillra_pda import config  # noqa: E402
 
 NOTEBOOK = config.NOTEBOOKS_DIR / "01_hse_project.ipynb"
-DEFAULT_TIMEOUT = int(os.environ.get("NBEXEC_TIMEOUT", "900"))
+DEFAULT_TIMEOUT = int(os.environ.get("NBEXEC_TIMEOUT", "600"))
 
 
 def main() -> None:
