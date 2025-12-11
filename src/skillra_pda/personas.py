@@ -204,7 +204,7 @@ def plot_persona_skill_gap(
         raise ValueError("Нет недостающих навыков для построения графика")
 
     top_missing = missing.sort_values(by="market_share", ascending=False)
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(10, 6))
     ax.barh(top_missing["skill_name"], top_missing["market_share"])
     ax.invert_yaxis()
     ax.set_xlabel("Доля вакансий с навыком")

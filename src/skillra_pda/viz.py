@@ -178,7 +178,7 @@ def corr_heatmap(corr: pd.DataFrame, return_fig: bool = False):
     if corr.empty:
         raise ValueError("corr_heatmap: expected non-empty correlation matrix")
     fig, ax = plt.subplots(figsize=HEATMAP_FIGSIZE)
-    cax = ax.imshow(corr, cmap="coolwarm", vmin=-1, vmax=1)
+    cax = ax.imshow(corr, cmap="coolwarm", vmin=-1, vmax=1, aspect="auto")
     ax.set_xticks(range(len(corr.columns)))
     ax.set_xticklabels(corr.columns, rotation=90)
     ax.set_yticks(range(len(corr.index)))
