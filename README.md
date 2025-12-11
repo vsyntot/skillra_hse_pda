@@ -23,8 +23,8 @@
 
 ## Парсер hh.ru
 - Полный сбор свежих IT-вакансий: `python parser/hh_scraper.py --limit 10000` (по умолчанию широкая булева строка по IT-ролям, регионы СНГ, задержки и ротация user-agent). Такой прогон может занять ~8 часов и сохранит CSV в `data/raw/`.
-- Тестовый/быстрый прогон: выставьте `DEFAULT_LIMIT = 50` в `parser/hh_scraper.py` или запустите `python parser/hh_scraper.py --limit 50 --output data/raw/hh_test.csv`.
-- Скрипт принимает параметры для `--areas`, `--max-pages`, `--proxies`, `--output`; ежедневный запуск собирает дельту активных вакансий, чтобы поддерживать актуальность витрины.
+- Тестовый/быстрый прогон: временно поставьте `DEFAULT_LIMIT = 50` в `parser/hh_scraper.py` или запустите `python parser/hh_scraper.py --limit 50 --output data/raw/hh_test.csv`.
+- Скрипт принимает параметры для `--areas`, `--max-pages`, `--proxies`, `--output`; ежедневный запуск собирает дельту активных вакансий и помогает накопить >500k строк. Детали — в `parser/README.md`.
 
 ## Проверка и тесты
 - Юнит-тесты: `pytest`.

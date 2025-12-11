@@ -26,7 +26,6 @@ dist/
 
 # Logs and datasets
 *.log
-data/
 
 # OS files
 .DS_Store
@@ -38,6 +37,8 @@ data/
 htmlcov/
 reports/figures/
 reports/tables/
+notebooks/*.html
+reports/notebooks/*.html
 
 # Data outputs
 data/processed/

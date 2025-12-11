@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Mapping
 
 import pandas as pd
 
+from . import config
+
 
 @dataclass
 class Persona:
@@ -208,7 +210,7 @@ def plot_persona_skill_gap(
     ax.set_xlabel("Доля вакансий с навыком")
     ax.set_title(f"Skill gap для персоны: {persona.name}")
 
-    output_dir = output_dir or Path("reports/figures")
+    output_dir = output_dir or config.FIGURES_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"fig_persona_{persona.name.lower().replace(' ', '_')}_skill_gap.png"
     fig.tight_layout()
