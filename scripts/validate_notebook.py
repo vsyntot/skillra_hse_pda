@@ -30,11 +30,18 @@ def main() -> None:
             "--to",
             "html",
             "--execute",
+            "--no-input",
             f"--ExecutePreprocessor.timeout={DEFAULT_TIMEOUT}",
+            "--output-dir",
+            str(config.NOTEBOOK_REPORTS_DIR),
+            "--output",
+            "01_hse_project",
             str(NOTEBOOK),
         ],
         check=True,
     )
+
+    print(f"HTML-отчёт сохранён в {config.NOTEBOOK_REPORTS_DIR / '01_hse_project.html'}")
 
 
 if __name__ == "__main__":

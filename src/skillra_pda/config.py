@@ -14,6 +14,7 @@ PROCESSED_DATA_DIR = DATA_DIR / "processed"
 REPORTS_DIR = REPO_ROOT / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
 NOTEBOOKS_DIR = REPO_ROOT / "notebooks"
+NOTEBOOK_REPORTS_DIR = REPORTS_DIR / "notebooks"
 
 # Default filenames
 RAW_DATA_FILE = RAW_DATA_DIR / "hh_moscow_it_2025_11_30.csv"
@@ -23,5 +24,5 @@ FEATURE_DATA_FILE = PROCESSED_DATA_DIR / "hh_features.parquet"
 
 def ensure_directories() -> None:
     """Create common output directories if they do not already exist."""
-    for path in [PROCESSED_DATA_DIR, FIGURES_DIR]:
+    for path in [PROCESSED_DATA_DIR, FIGURES_DIR, NOTEBOOK_REPORTS_DIR]:
         path.mkdir(parents=True, exist_ok=True)
