@@ -236,7 +236,7 @@ def salary_mean_and_count_bar(
     """Bar of median salary with vacancy counts on a twin axis for a category."""
 
     _require_columns(df, [category_col, salary_col], "salary_mean_and_count_bar")
-    agg = df.groupby(category_col)[salary_col].agg(median="median", mean="mean", count="count")
+    agg = df.groupby(category_col, observed=True)[salary_col].agg(median="median", mean="mean", count="count")
     top = agg.sort_values(by="count", ascending=False).head(top_n)
     if top.empty:
         raise ValueError("salary_mean_and_count_bar: no data after aggregation")
