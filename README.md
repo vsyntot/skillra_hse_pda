@@ -14,7 +14,7 @@
 
 ## Установка окружения
 1. Создайте виртуальное окружение: `python -m venv .venv && source .venv/bin/activate`.
-2. Установите зависимости: `pip install -r requirements.txt` или `pip install -e . -r requirements.txt` для editable-режима.
+2. Установите зависимости: `pip install -r requirements.txt` или `pip install -e . -r requirements.txt` для editable-режима (в них уже есть parquet‑движок `pyarrow`). При необходимости установите `pyarrow` отдельно: `pip install pyarrow`.
 3. Убедитесь, что сырые данные лежат по умолчанию в `data/raw/hh_moscow_it_2025_11_30.csv` (путь можно изменить в `src/skillra_pda/config.py`).
 
 ## Запуск пайплайна
