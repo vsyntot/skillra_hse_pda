@@ -1,22 +1,7 @@
 """Unit tests for cleaning helpers."""
 
-import sys
-import types
-
 import pandas as pd
 
-personas_stub = types.ModuleType("src.skillra_pda.personas")
-for name in [
-    "DATA_STUDENT",
-    "MID_DATA_ANALYST",
-    "Persona",
-    "SWITCHER_BI",
-    "analyze_persona",
-    "build_skill_demand_profile",
-    "skill_gap_for_persona",
-]:
-    setattr(personas_stub, name, None)
-sys.modules.setdefault("src.skillra_pda.personas", personas_stub)
 from src.skillra_pda import cleaning
 
 

@@ -53,6 +53,26 @@ def salary_by_role_box(df: pd.DataFrame, salary_col: str = "salary_mid_rub_cappe
     return _save_fig(fig, "fig_salary_by_role_box.png")
 
 
+def salary_by_grade_city_heatmap(summary_df: pd.DataFrame, value_col: str = "median") -> Path:
+    """Heatmap of salary metric by grade (rows) and city tier (columns)."""
+
+    _require_columns(summary_df, ["grade", "city_tier", value_col], "salary_by_grade_city_heatmap")
+    pivot = summary_df.pivot(index="grade", columns="city_tier", values=value_col)
+    if pivot.empty:
+        raise ValueError("salary_by_grade_city_heatmap: got empty pivot table")
+
+    numeric = pivot.astype(float)
+    fig, ax = plt.subplots(figsize=(9, 6))
+    cax = ax.imshow(numeric.values, aspect="auto", cmap="coolwarm")
+    ax.set_xticks(range(len(numeric.columns)))
+    ax.set_xticklabels(numeric.columns)
+    ax.set_yticks(range(len(numeric.index)))
+    ax.set_yticklabels(numeric.index)
+    fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04, label=f"Salary {value_col}")
+    ax.set_title("Salary by grade and city tier")
+    return _save_fig(fig, "fig_salary_by_grade_city_heatmap.png")
+
+
 def work_mode_share_by_city(df: pd.DataFrame) -> Path:
     _require_columns(df, ["city_tier", "work_mode"], "work_mode_share_by_city")
     pivot = pd.crosstab(df["city_tier"], df["work_mode"], normalize="index")
@@ -63,6 +83,40 @@ def work_mode_share_by_city(df: pd.DataFrame) -> Path:
     ax.set_title("Work mode share by city tier")
     ax.legend(title="Work mode", bbox_to_anchor=(1.05, 1), loc="upper left")
     return _save_fig(fig, "fig_work_mode_share_by_city.png")
+
+
+def salary_by_role_work_mode_heatmap(summary_df: pd.DataFrame, value_col: str = "salary_median") -> Path:
+    """Heatmap of salary metric by role (rows) and work mode (columns)."""
+
+    _require_columns(summary_df, ["primary_role", "work_mode", value_col], "salary_by_role_work_mode_heatmap")
+    pivot = summary_df.pivot(index="primary_role", columns="work_mode", values=value_col)
+    if pivot.empty:
+        raise ValueError("salary_by_role_work_mode_heatmap: got empty pivot table")
+
+    numeric = pivot.astype(float)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    cax = ax.imshow(numeric.values, aspect="auto", cmap="OrRd")
+    ax.set_xticks(range(len(numeric.columns)))
+    ax.set_xticklabels(numeric.columns)
+    ax.set_yticks(range(len(numeric.index)))
+    ax.set_yticklabels(numeric.index)
+    fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04, label=f"Salary {value_col}")
+    ax.set_title("Salary by role and work mode")
+    return _save_fig(fig, "fig_salary_by_role_work_mode_heatmap.png")
+
+
+def remote_share_by_role_bar(remote_df: pd.DataFrame) -> Path:
+    """Bar chart of remote vacancy share by primary role."""
+
+    _require_columns(remote_df, ["primary_role", "remote_share"], "remote_share_by_role_bar")
+    ordered = remote_df.sort_values(by="remote_share", ascending=False)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(ordered["primary_role"], ordered["remote_share"], color="teal")
+    ax.set_ylabel("Remote share")
+    ax.set_xlabel("Primary role")
+    ax.set_title("Remote vacancy share by role")
+    ax.tick_params(axis="x", rotation=45)
+    return _save_fig(fig, "fig_remote_share_by_role.png")
 
 
 def top_skills_bar(df: pd.DataFrame, skill_cols: Iterable[str], role_filter: str = "data", top_n: int = 15) -> Path:
