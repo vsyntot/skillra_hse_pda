@@ -348,8 +348,8 @@ def salary_by_skills_bucket_plot(
     category_col = "tech_stack_size"
     _require_columns(df, [category_col], "salary_by_skills_bucket_plot")
     # Bin stack size for readability
-    bins = [-1, 2, 5, 10, df[category_col].max()] if not df[category_col].isna().all() else [-1, 0, 1]
-    labels = ["0-2", "3-5", "6-10", "10+"] if len(bins) == 4 else ["0-1", "1+"]
+    bins = [-0.5, 2.5, 5.5, 10.5, float("inf")] if not df[category_col].isna().all() else [-0.5, 0.5, float("inf")]
+    labels = ["0-2", "3-5", "6-10", "10+"] if len(bins) == 5 else ["0-1", "1+"]
     df_local = df.copy()
     df_local["stack_bucket"] = pd.cut(df_local[category_col].fillna(0), bins=bins, labels=labels, include_lowest=True)
     return salary_mean_and_count_bar(
