@@ -13,14 +13,22 @@ from .config import FIGURES_DIR, ensure_directories
 ensure_directories()
 
 
-def _save_fig(fig: plt.Figure, filename: str | Path) -> Path:
+def _save_fig(fig: plt.Figure, filename: str | Path, close: bool = True) -> Path:
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     filename_path = Path(filename)
     output = filename_path if filename_path.is_absolute() else FIGURES_DIR / filename_path
     fig.tight_layout()
     fig.savefig(output, dpi=200)
-    plt.close(fig)
+    if close:
+        plt.close(fig)
     return output
+
+
+def _finalize_figure(fig: plt.Figure, filename: str | Path, return_fig: bool = False):
+    path = _save_fig(fig, filename, close=not return_fig)
+    if return_fig:
+        return fig, path
+    return path
 
 
 def _require_columns(df: pd.DataFrame, cols: Iterable[str], func_name: str) -> None:
@@ -29,7 +37,9 @@ def _require_columns(df: pd.DataFrame, cols: Iterable[str], func_name: str) -> N
         raise ValueError(f"{func_name}: expected columns {missing}, but they are missing")
 
 
-def salary_by_grade_box(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped") -> Path:
+def salary_by_grade_box(
+    df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped", return_fig: bool = False
+):
     _require_columns(df, ["grade", salary_col], "salary_by_grade_box")
     fig, ax = plt.subplots(figsize=(8, 5))
     df.boxplot(column=salary_col, by="grade", ax=ax)
@@ -37,10 +47,15 @@ def salary_by_grade_box(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capp
     ax.set_xlabel("Grade")
     ax.set_ylabel("Salary (RUB, capped)")
     fig.suptitle("")
-    return _save_fig(fig, "fig_salary_by_grade_box.png")
+    return _finalize_figure(fig, "fig_salary_by_grade_box.png", return_fig)
 
 
-def salary_by_role_box(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped", top_n: int = 8) -> Path:
+def salary_by_role_box(
+    df: pd.DataFrame,
+    salary_col: str = "salary_mid_rub_capped",
+    top_n: int = 8,
+    return_fig: bool = False,
+):
     _require_columns(df, ["primary_role", salary_col], "salary_by_role_box")
     top_roles = df["primary_role"].value_counts().head(top_n).index
     filtered = df[df["primary_role"].isin(top_roles)]
@@ -50,10 +65,12 @@ def salary_by_role_box(df: pd.DataFrame, salary_col: str = "salary_mid_rub_cappe
     ax.set_xlabel("Primary role")
     ax.set_ylabel("Salary (RUB, capped)")
     fig.suptitle("")
-    return _save_fig(fig, "fig_salary_by_role_box.png")
+    return _finalize_figure(fig, "fig_salary_by_role_box.png", return_fig)
 
 
-def salary_by_grade_city_heatmap(summary_df: pd.DataFrame, value_col: str = "median") -> Path:
+def salary_by_grade_city_heatmap(
+    summary_df: pd.DataFrame, value_col: str = "median", return_fig: bool = False
+):
     """Heatmap of salary metric by grade (rows) and city tier (columns)."""
 
     _require_columns(summary_df, ["grade", "city_tier", value_col], "salary_by_grade_city_heatmap")
@@ -70,10 +87,10 @@ def salary_by_grade_city_heatmap(summary_df: pd.DataFrame, value_col: str = "med
     ax.set_yticklabels(numeric.index)
     fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04, label=f"Salary {value_col}")
     ax.set_title("Salary by grade and city tier")
-    return _save_fig(fig, "fig_salary_by_grade_city_heatmap.png")
+    return _finalize_figure(fig, "fig_salary_by_grade_city_heatmap.png", return_fig)
 
 
-def work_mode_share_by_city(df: pd.DataFrame) -> Path:
+def work_mode_share_by_city(df: pd.DataFrame, return_fig: bool = False):
     _require_columns(df, ["city_tier", "work_mode"], "work_mode_share_by_city")
     pivot = pd.crosstab(df["city_tier"], df["work_mode"], normalize="index")
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -82,10 +99,12 @@ def work_mode_share_by_city(df: pd.DataFrame) -> Path:
     ax.set_xlabel("City tier")
     ax.set_title("Work mode share by city tier")
     ax.legend(title="Work mode", bbox_to_anchor=(1.05, 1), loc="upper left")
-    return _save_fig(fig, "fig_work_mode_share_by_city.png")
+    return _finalize_figure(fig, "fig_work_mode_share_by_city.png", return_fig)
 
 
-def salary_by_role_work_mode_heatmap(summary_df: pd.DataFrame, value_col: str = "salary_median") -> Path:
+def salary_by_role_work_mode_heatmap(
+    summary_df: pd.DataFrame, value_col: str = "salary_median", return_fig: bool = False
+):
     """Heatmap of salary metric by role (rows) and work mode (columns)."""
 
     _require_columns(summary_df, ["primary_role", "work_mode", value_col], "salary_by_role_work_mode_heatmap")
@@ -102,10 +121,10 @@ def salary_by_role_work_mode_heatmap(summary_df: pd.DataFrame, value_col: str = 
     ax.set_yticklabels(numeric.index)
     fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04, label=f"Salary {value_col}")
     ax.set_title("Salary by role and work mode")
-    return _save_fig(fig, "fig_salary_by_role_work_mode_heatmap.png")
+    return _finalize_figure(fig, "fig_salary_by_role_work_mode_heatmap.png", return_fig)
 
 
-def remote_share_by_role_bar(remote_df: pd.DataFrame) -> Path:
+def remote_share_by_role_bar(remote_df: pd.DataFrame, return_fig: bool = False):
     """Bar chart of remote vacancy share by primary role."""
 
     _require_columns(remote_df, ["primary_role", "remote_share"], "remote_share_by_role_bar")
@@ -116,10 +135,16 @@ def remote_share_by_role_bar(remote_df: pd.DataFrame) -> Path:
     ax.set_xlabel("Primary role")
     ax.set_title("Remote vacancy share by role")
     ax.tick_params(axis="x", rotation=45)
-    return _save_fig(fig, "fig_remote_share_by_role.png")
+    return _finalize_figure(fig, "fig_remote_share_by_role.png", return_fig)
 
 
-def top_skills_bar(df: pd.DataFrame, skill_cols: Iterable[str], role_filter: str = "data", top_n: int = 15) -> Path:
+def top_skills_bar(
+    df: pd.DataFrame,
+    skill_cols: Iterable[str],
+    role_filter: str = "data",
+    top_n: int = 15,
+    return_fig: bool = False,
+):
     _require_columns(df, ["primary_role"], "top_skills_bar")
     missing_skills = [c for c in skill_cols if c not in df.columns]
     if missing_skills:
@@ -130,10 +155,10 @@ def top_skills_bar(df: pd.DataFrame, skill_cols: Iterable[str], role_filter: str
     freq.plot(kind="bar", ax=ax)
     ax.set_ylabel("Count")
     ax.set_title(f"Top {top_n} skills for {role_filter} roles")
-    return _save_fig(fig, "fig_top_skills_data_bar.png")
+    return _finalize_figure(fig, "fig_top_skills_data_bar.png", return_fig)
 
 
-def skill_premium_bar(premium_df: pd.DataFrame, top_n: int = 10) -> Path:
+def skill_premium_bar(premium_df: pd.DataFrame, top_n: int = 10, return_fig: bool = False):
     _require_columns(premium_df, ["skill", "premium_pct"], "skill_premium_bar")
     top = premium_df.sort_values(by="premium_pct", ascending=False).head(top_n)
     fig, ax = plt.subplots(figsize=(9, 5))
@@ -142,10 +167,10 @@ def skill_premium_bar(premium_df: pd.DataFrame, top_n: int = 10) -> Path:
     ax.set_xlabel("Skill")
     ax.set_title("Top skill premium")
     plt.xticks(rotation=60, ha="right")
-    return _save_fig(fig, "fig_skill_premium_bar.png")
+    return _finalize_figure(fig, "fig_skill_premium_bar.png", return_fig)
 
 
-def corr_heatmap(corr: pd.DataFrame) -> Path:
+def corr_heatmap(corr: pd.DataFrame, return_fig: bool = False):
     if corr.empty:
         raise ValueError("corr_heatmap: expected non-empty correlation matrix")
     fig, ax = plt.subplots(figsize=(8, 6))
@@ -156,7 +181,7 @@ def corr_heatmap(corr: pd.DataFrame) -> Path:
     ax.set_yticklabels(corr.index)
     fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04)
     ax.set_title("Correlation heatmap")
-    return _save_fig(fig, "fig_corr_heatmap.png")
+    return _finalize_figure(fig, "fig_corr_heatmap.png", return_fig)
 
 
 def skill_heatmap(
@@ -166,7 +191,8 @@ def skill_heatmap(
     title: str,
     filename: str,
     top_n: int = 20,
-) -> Path:
+    return_fig: bool = False,
+) -> Path | tuple[plt.Figure, Path]:
     """Plot heatmap of skill prevalence across a categorical segment."""
 
     _require_columns(df, [index_col], "skill_heatmap")
@@ -195,7 +221,7 @@ def skill_heatmap(
     ax.set_yticklabels(pivot.index)
     fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04, label="Share")
     ax.set_title(title)
-    return _save_fig(fig, filename)
+    return _finalize_figure(fig, filename, return_fig=return_fig)
 
 
 def salary_mean_and_count_bar(
@@ -205,7 +231,8 @@ def salary_mean_and_count_bar(
     top_n: int = 10,
     figsize: tuple[int, int] = (10, 6),
     output_path: Path | None = None,
-) -> Path:
+    return_fig: bool = False,
+) -> Path | tuple[plt.Figure, Path]:
     """Bar of median salary with vacancy counts on a twin axis for a category."""
 
     _require_columns(df, [category_col, salary_col], "salary_mean_and_count_bar")
@@ -226,7 +253,7 @@ def salary_mean_and_count_bar(
 
     ax1.set_title(f"Salary and vacancy count by {category_col}")
     filename = output_path or FIGURES_DIR / f"fig_salary_{category_col}_mean_count.png"
-    return _save_fig(fig, filename)
+    return _finalize_figure(fig, filename, return_fig=return_fig)
 
 
 def salary_by_city_mean_count_plot(
@@ -234,7 +261,8 @@ def salary_by_city_mean_count_plot(
     salary_col: str = "salary_mid_rub_capped",
     top_n: int = 10,
     figsize: tuple[int, int] = (10, 6),
-) -> Path:
+    return_fig: bool = False,
+) -> Path | tuple[plt.Figure, Path]:
     """Wrapper for salary mean/count by city tier."""
 
     return salary_mean_and_count_bar(
@@ -244,6 +272,7 @@ def salary_by_city_mean_count_plot(
         top_n=top_n,
         figsize=figsize,
         output_path=FIGURES_DIR / "fig_salary_by_city_mean_count.png",
+        return_fig=return_fig,
     )
 
 
@@ -252,7 +281,8 @@ def salary_by_grade_mean_count_plot(
     salary_col: str = "salary_mid_rub_capped",
     top_n: int = 10,
     figsize: tuple[int, int] = (10, 6),
-) -> Path:
+    return_fig: bool = False,
+) -> Path | tuple[plt.Figure, Path]:
     """Wrapper for salary mean/count by grade."""
 
     return salary_mean_and_count_bar(
@@ -262,6 +292,7 @@ def salary_by_grade_mean_count_plot(
         top_n=top_n,
         figsize=figsize,
         output_path=FIGURES_DIR / "fig_salary_by_grade_mean_count.png",
+        return_fig=return_fig,
     )
 
 
@@ -270,7 +301,8 @@ def salary_by_primary_role_mean_count_plot(
     salary_col: str = "salary_mid_rub_capped",
     top_n: int = 10,
     figsize: tuple[int, int] = (10, 6),
-) -> Path:
+    return_fig: bool = False,
+) -> Path | tuple[plt.Figure, Path]:
     """Wrapper for salary mean/count by primary role."""
 
     return salary_mean_and_count_bar(
@@ -280,6 +312,7 @@ def salary_by_primary_role_mean_count_plot(
         top_n=top_n,
         figsize=figsize,
         output_path=FIGURES_DIR / "fig_salary_by_primary_role_mean_count.png",
+        return_fig=return_fig,
     )
 
 
@@ -288,7 +321,8 @@ def salary_by_employer_rating_plot(
     salary_col: str = "salary_mid_rub_capped",
     top_n: int = 10,
     figsize: tuple[int, int] = (10, 6),
-) -> Path:
+    return_fig: bool = False,
+) -> Path | tuple[plt.Figure, Path]:
     """Wrapper for salary mean/count by employer rating buckets."""
 
     return salary_mean_and_count_bar(
@@ -298,6 +332,7 @@ def salary_by_employer_rating_plot(
         top_n=top_n,
         figsize=figsize,
         output_path=FIGURES_DIR / "fig_salary_by_employer_rating_mean_count.png",
+        return_fig=return_fig,
     )
 
 
@@ -306,14 +341,15 @@ def salary_by_skills_bucket_plot(
     salary_col: str = "salary_mid_rub_capped",
     top_n: int = 10,
     figsize: tuple[int, int] = (10, 6),
-) -> Path:
+    return_fig: bool = False,
+) -> Path | tuple[plt.Figure, Path]:
     """Wrapper for salary mean/count by tech stack size buckets."""
 
     category_col = "tech_stack_size"
     _require_columns(df, [category_col], "salary_by_skills_bucket_plot")
     # Bin stack size for readability
-    bins = [-1, 2, 5, 10, df[category_col].max()] if not df[category_col].isna().all() else [-1, 0, 1]
-    labels = ["0-2", "3-5", "6-10", "10+"] if len(bins) == 4 else ["0-1", "1+"]
+    bins = [-0.5, 2.5, 5.5, 10.5, float("inf")] if not df[category_col].isna().all() else [-0.5, 0.5, float("inf")]
+    labels = ["0-2", "3-5", "6-10", "10+"] if len(bins) == 5 else ["0-1", "1+"]
     df_local = df.copy()
     df_local["stack_bucket"] = pd.cut(df_local[category_col].fillna(0), bins=bins, labels=labels, include_lowest=True)
     return salary_mean_and_count_bar(
@@ -323,6 +359,7 @@ def salary_by_skills_bucket_plot(
         top_n=top_n,
         figsize=figsize,
         output_path=FIGURES_DIR / "fig_salary_by_skills_bucket_mean_count.png",
+        return_fig=return_fig,
     )
 
 
@@ -331,7 +368,8 @@ def salary_by_domain_plot(
     top_n: int = 10,
     savepath: Path | None = None,
     priorities: list[str] | None = None,
-) -> Path:
+    return_fig: bool = False,
+) -> Path | tuple[plt.Figure, Path]:
     """Barplot of median salary by domain with vacancy counts on a twin axis.
 
     Args:
@@ -361,10 +399,12 @@ def salary_by_domain_plot(
 
     ax1.set_title("Salary by domain")
     filename = savepath or FIGURES_DIR / "fig_salary_by_domain.png"
-    return _save_fig(fig, filename)
+    return _finalize_figure(fig, filename, return_fig=return_fig)
 
 
-def salary_by_english_level_plot(df: pd.DataFrame, savepath: Path | None = None) -> Path:
+def salary_by_english_level_plot(
+    df: pd.DataFrame, savepath: Path | None = None, return_fig: bool = False
+) -> Path | tuple[plt.Figure, Path]:
     """Barplot of median salary by English level."""
 
     from . import eda as eda_mod
@@ -382,10 +422,12 @@ def salary_by_english_level_plot(df: pd.DataFrame, savepath: Path | None = None)
     ax.set_title("Salary by English level")
 
     filename = savepath or FIGURES_DIR / "fig_salary_by_english_level.png"
-    return _save_fig(fig, filename)
+    return _finalize_figure(fig, filename, return_fig=return_fig)
 
 
-def salary_by_education_level_plot(df: pd.DataFrame, savepath: Path | None = None) -> Path:
+def salary_by_education_level_plot(
+    df: pd.DataFrame, savepath: Path | None = None, return_fig: bool = False
+) -> Path | tuple[plt.Figure, Path]:
     """Barplot of median salary by education requirement level."""
 
     from . import eda as eda_mod
@@ -403,12 +445,15 @@ def salary_by_education_level_plot(df: pd.DataFrame, savepath: Path | None = Non
     ax.set_title("Salary by education requirement")
 
     filename = savepath or FIGURES_DIR / "fig_salary_by_education_level.png"
-    return _save_fig(fig, filename)
+    return _finalize_figure(fig, filename, return_fig=return_fig)
 
 
 def heatmap_skills_by_grade(
-    skill_share: pd.DataFrame, figsize: tuple[int, int] = (10, 6), output_path: Path | None = None
-) -> Path:
+    skill_share: pd.DataFrame,
+    figsize: tuple[int, int] = (10, 6),
+    output_path: Path | None = None,
+    return_fig: bool = False,
+) -> Path | tuple[plt.Figure, Path]:
     """Plot heatmap for skill (index) x grade (columns) share matrix."""
 
     if skill_share.empty:
@@ -426,12 +471,15 @@ def heatmap_skills_by_grade(
     fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04, label="Share")
     ax.set_title("Skill share by grade")
     filename = output_path or FIGURES_DIR / "fig_skill_vs_grade_heatmap.png"
-    return _save_fig(fig, filename)
+    return _finalize_figure(fig, filename, return_fig=return_fig)
 
 
 def heatmap_benefits_by_company(
-    benefits_df: pd.DataFrame, figsize: tuple[int, int] = (10, 6), output_path: Path | None = None
-) -> Path:
+    benefits_df: pd.DataFrame,
+    figsize: tuple[int, int] = (10, 6),
+    output_path: Path | None = None,
+    return_fig: bool = False,
+) -> Path | tuple[plt.Figure, Path]:
     """Plot heatmap for company x benefits matrix."""
 
     if benefits_df.empty:
@@ -449,7 +497,7 @@ def heatmap_benefits_by_company(
     fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04, label="Share")
     ax.set_title("Benefits prevalence by company")
     filename = output_path or FIGURES_DIR / "fig_benefits_by_company_heatmap.png"
-    return _save_fig(fig, filename)
+    return _finalize_figure(fig, filename, return_fig=return_fig)
 
 
 def benefits_employer_heatmap(
@@ -458,7 +506,8 @@ def benefits_employer_heatmap(
     top_n_benefits: int = 12,
     figsize: tuple[int, int] = (12, 6),
     output_path: Path | None = None,
-) -> Path:
+    return_fig: bool = False,
+) -> Path | tuple[plt.Figure, Path]:
     """Plot heatmap of benefit prevalence for top employers."""
 
     from . import eda as eda_mod
@@ -484,12 +533,15 @@ def benefits_employer_heatmap(
     fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04, label="Share")
     ax.set_title("Benefits by employer")
     filename = output_path or FIGURES_DIR / "fig_benefits_employer_heatmap.png"
-    return _save_fig(fig, filename)
+    return _finalize_figure(fig, filename, return_fig=return_fig)
 
 
 def heatmap_soft_skills_correlation(
-    corr_df: pd.DataFrame, figsize: tuple[int, int] = (8, 6), output_path: Path | None = None
-) -> Path:
+    corr_df: pd.DataFrame,
+    figsize: tuple[int, int] = (8, 6),
+    output_path: Path | None = None,
+    return_fig: bool = False,
+) -> Path | tuple[plt.Figure, Path]:
     """Plot correlation heatmap for soft skill columns."""
 
     if corr_df.empty:
@@ -506,7 +558,7 @@ def heatmap_soft_skills_correlation(
     fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04)
     ax.set_title("Soft skills correlation")
     filename = output_path or FIGURES_DIR / "fig_soft_skills_corr_heatmap.png"
-    return _save_fig(fig, filename)
+    return _finalize_figure(fig, filename, return_fig=return_fig)
 
 
 def soft_skills_employer_heatmap(
@@ -515,7 +567,8 @@ def soft_skills_employer_heatmap(
     top_n_skills: int = 12,
     figsize: tuple[int, int] = (12, 6),
     output_path: Path | None = None,
-) -> Path:
+    return_fig: bool = False,
+) -> Path | tuple[plt.Figure, Path]:
     """Plot heatmap of soft skill prevalence for top employers."""
 
     from . import eda as eda_mod
@@ -541,7 +594,7 @@ def soft_skills_employer_heatmap(
     fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04, label="Share")
     ax.set_title("Soft skills by employer")
     filename = output_path or FIGURES_DIR / "fig_soft_skills_employer_heatmap.png"
-    return _save_fig(fig, filename)
+    return _finalize_figure(fig, filename, return_fig=return_fig)
 
 
 def distribution_with_boxplot(
@@ -550,7 +603,8 @@ def distribution_with_boxplot(
     bins: int = 30,
     figsize: tuple[int, int] = (10, 6),
     output_path: Path | None = None,
-) -> Path:
+    return_fig: bool = False,
+) -> Path | tuple[plt.Figure, Path]:
     """Histogram plus boxplot for a numeric column."""
 
     _require_columns(df, [column], "distribution_with_boxplot")
@@ -569,4 +623,4 @@ def distribution_with_boxplot(
     ax_box.set_xlabel(column)
 
     filename = output_path or FIGURES_DIR / f"fig_dist_{column}.png"
-    return _save_fig(fig, filename)
+    return _finalize_figure(fig, filename, return_fig=return_fig)
