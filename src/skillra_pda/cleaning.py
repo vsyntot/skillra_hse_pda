@@ -7,7 +7,25 @@ import numpy as np
 import pandas as pd
 
 PREFIX_GROUPS = ["is_", "has_", "skill_", "benefit_", "soft_", "domain_", "role_"]
-BOOL_NULL_MARKERS = {"unknown", "", "n/a", "nan"}
+
+# Unified markers that represent unknown or missing text values
+UNKNOWN_MARKERS = {
+    "unknown",
+    "Unknown",
+    "UNKNOWN",
+    "не указано",
+    "Не указано",
+    "неизвестно",
+    "",
+    " ",
+    "n/a",
+    "N/A",
+    "nan",
+    "-",
+    "—",
+}
+
+BOOL_NULL_MARKERS = {m.strip().lower() for m in UNKNOWN_MARKERS if isinstance(m, str)}
 BOOL_TRUE_MARKERS = {True, 1, "1", "true", "yes"}
 BOOL_FALSE_MARKERS = {False, 0, "0", "false", "no"}
 BOOLEAN_MARKERS = BOOL_TRUE_MARKERS | BOOL_FALSE_MARKERS | BOOL_NULL_MARKERS
@@ -194,6 +212,45 @@ def _fill_categorical_missing(
     return df, filled_cols
 
 
+def standardize_unknown_markers(
+    df: pd.DataFrame, markers: Iterable[str] | None = None
+) -> Tuple[pd.DataFrame, List[str]]:
+    """Replace textual unknown markers with ``pd.NA`` for string-like columns.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe to process. A copy is returned.
+    markers : Iterable[str] | None
+        Collection of textual markers representing unknown values. Defaults to
+        ``UNKNOWN_MARKERS``.
+
+    Returns
+    -------
+    Tuple[pd.DataFrame, List[str]]
+        Updated dataframe and the list of columns where replacements occurred.
+    """
+
+    df = df.copy()
+    markers_set = {m.strip().lower() for m in (markers or UNKNOWN_MARKERS)}
+    affected: List[str] = []
+
+    def is_marker(val: object) -> bool:
+        return isinstance(val, str) and val.strip().lower() in markers_set
+
+    for col in df.columns:
+        dtype_str = str(df[col].dtype)
+        if dtype_str != "object" and not dtype_str.startswith("category"):
+            continue
+        series = df[col]
+        mask = series.map(is_marker)
+        if mask.any():
+            df[col] = series.mask(mask, pd.NA)
+            affected.append(col)
+
+    return df, affected
+
+
 def _fill_numeric_missing(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
     """Fill missing numeric columns with median values."""
 
@@ -302,11 +359,13 @@ def handle_missingness(df: pd.DataFrame, drop_threshold: float = 0.95) -> pd.Dat
 
     df = df.copy()
 
+    df, normalized_unknown_cols = standardize_unknown_markers(df)
     df, dropped_cols = _drop_mostly_missing_columns(df, threshold=drop_threshold)
     df, bool_like_cols = _coerce_boolean_like_columns(df)
     df, filled_categorical_cols = _fill_categorical_missing(df, exclude=bool_like_cols)
     df, filled_numeric_cols = _fill_numeric_missing(df)
 
+    df.attrs["normalized_unknown_cols"] = normalized_unknown_cols
     df.attrs["dropped_cols"] = dropped_cols
     df.attrs["bool_like_cols"] = bool_like_cols
     df.attrs["filled_categorical_cols"] = filled_categorical_cols
@@ -322,12 +381,7 @@ def ensure_salary_gross_boolean(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     replacement_map = {
-        "unknown": pd.NA,
-        "Unknown": pd.NA,
-        "UNKNOWN": pd.NA,
-        "": pd.NA,
-        "n/a": pd.NA,
-        "nan": pd.NA,
+        **{m: pd.NA for m in UNKNOWN_MARKERS if isinstance(m, str)},
         "true": True,
         "false": False,
         "yes": True,
@@ -347,6 +401,55 @@ def ensure_salary_gross_boolean(df: pd.DataFrame) -> pd.DataFrame:
     )
     df["salary_gross"] = coerced.astype("boolean")
     return df
+
+
+def summarize_data_health(df: pd.DataFrame, prefix: str = "") -> pd.DataFrame:
+    """Summarize data health: dtype, NaN share, unknown markers, comments.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe to summarize.
+    prefix : str, optional
+        Optional prefix for column names in the report.
+
+    Returns
+    -------
+    pd.DataFrame
+        Table with columns: column, dtype, share_nan, share_unknown_marker, comment.
+    """
+
+    markers_set = {m.strip().lower() for m in UNKNOWN_MARKERS}
+    records: List[Dict[str, object]] = []
+
+    for col in df.columns:
+        series = df[col]
+        dtype_str = str(series.dtype)
+        nan_share = float(series.isna().mean())
+
+        unknown_mask = series.apply(
+            lambda v: isinstance(v, str) and v.strip().lower() in markers_set
+        )
+        unknown_share = float(unknown_mask.mean())
+
+        comment_parts: List[str] = []
+        if nan_share > 0:
+            comment_parts.append(f"NaN {nan_share:.1%}")
+        if unknown_share > 0:
+            comment_parts.append(f"text unknown {unknown_share:.1%}")
+
+        comment = ", ".join(comment_parts) if comment_parts else "clean"
+        records.append(
+            {
+                "column": f"{prefix}{col}" if prefix else col,
+                "dtype": dtype_str,
+                "share_nan": nan_share,
+                "share_unknown_marker": unknown_share,
+                "comment": comment,
+            }
+        )
+
+    return pd.DataFrame(records)
 
 
 def salary_prepare(df: pd.DataFrame) -> pd.DataFrame:
