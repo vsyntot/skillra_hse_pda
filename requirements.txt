@@ -4,6 +4,8 @@ matplotlib
 pyarrow
 seaborn
 scikit-learn
+requests
+beautifulsoup4
 nbformat
 notebook
 ipykernel

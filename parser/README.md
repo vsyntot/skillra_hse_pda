@@ -64,13 +64,10 @@ python hh_scraper.py --query "Python разработчик" --limit 12000 \
 
 Для быстрого теста без долгого ожидания используйте `--limit 50 --max-pages 2`, чтобы убедиться, что CSV формируется корректно, а затем запускайте полноценный сбор.
 
-## Запуск в PyCharm
+## Запуск
 
-1. Откройте проект в PyCharm (`File → Open…` и выберите папку репозитория).
-2. Создайте виртуальное окружение (PyCharm предложит его при открытии проекта, либо вручную через `Python Interpreter → Add`).
-3. Установите зависимости: в терминале PyCharm выполните `pip install -r requirements.txt`.
-4. Создайте **Run Configuration** типа *Python*: в поле **Script path** укажите `hh_scraper.py`, а в **Parameters** добавьте нужные флаги (например, `--query "Python" --limit 12000 --proxies proxies.txt`).
-5. Убедитесь, что рабочая директория в конфигурации указывает на корень проекта, чтобы путь вида `data/hh_moscow_it_YYYY_MM_DD_HH_MM_SS.csv` создавался корректно.
-6. Запустите конфигурацию (зелёная кнопка Run). По завершении увидите сообщение `Saved N rows to data/hh_moscow_it_YYYY_MM_DD_HH_MM_SS.csv`, а CSV появится в каталоге `data/`.
+1. Создайте **Run Configuration** типа *Python*: в поле **Script path** укажите `hh_scraper.py`, а в **Parameters** добавьте нужные флаги (например, `--query "Python" --limit 12000 --proxies proxies.txt`).
+2. Убедитесь, что рабочая директория в конфигурации указывает на корень проекта, чтобы путь вида `data/hh_moscow_it_YYYY_MM_DD_HH_MM_SS.csv` создавался корректно.
+3. Запустите конфигурацию (зелёная кнопка Run). По завершении увидите сообщение `Saved N rows to data/hh_moscow_it_YYYY_MM_DD_HH_MM_SS.csv`, а CSV появится в каталоге `data/`.
 
 Совет: на время отладки можете временно поставить `--limit 100 --max-pages 3`, чтобы не ждать полный сбор 10k строк.
