@@ -321,7 +321,7 @@ def salary_summary_by_role_and_work_mode(df: pd.DataFrame, salary_col: str = "sa
         raise KeyError(f"Ожидал колонки {missing} для salary_summary_by_role_and_work_mode")
 
     return (
-        df.groupby(["primary_role", "work_mode"])[salary_col]
+        df.groupby(["primary_role", "work_mode"], observed=True)[salary_col]
         .median()
         .reset_index()
         .rename(columns={salary_col: "salary_median"})
@@ -336,7 +336,7 @@ def remote_share_by_role(df: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise KeyError(f"Ожидал колонки {missing} для remote_share_by_role")
 
-    pivot = df.groupby("primary_role")[["is_remote"]].mean().reset_index()
+    pivot = df.groupby("primary_role", observed=True)[["is_remote"]].mean().reset_index()
     pivot = pivot.rename(columns={"is_remote": "remote_share"})
     return pivot.sort_values(by="remote_share", ascending=False)
 
