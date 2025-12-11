@@ -184,8 +184,13 @@ def analyze_persona(df: pd.DataFrame, persona: Persona, top_k: int = 10) -> dict
     }
 
 
-def plot_persona_skill_gap(gap_df: pd.DataFrame, persona: Persona, output_dir: Path | None = None) -> Path:
-    """Plot top missing skills for a persona."""
+def plot_persona_skill_gap(
+    gap_df: pd.DataFrame,
+    persona: Persona,
+    output_dir: Path | None = None,
+    return_fig: bool = False,
+) -> Path | tuple[plt.Figure, Path]:
+    """Plot top missing skills for a persona and optionally return a Figure."""
 
     import matplotlib.pyplot as plt
 
@@ -208,8 +213,10 @@ def plot_persona_skill_gap(gap_df: pd.DataFrame, persona: Persona, output_dir: P
     output_path = output_dir / f"fig_persona_{persona.name.lower().replace(' ', '_')}_skill_gap.png"
     fig.tight_layout()
     fig.savefig(output_path, dpi=200)
-    plt.close(fig)
-    return output_path
+    if not return_fig:
+        plt.close(fig)
+        return output_path
+    return fig, output_path
 
 
 # Pre-defined personas for quick experimentation in the notebook/product layer.
