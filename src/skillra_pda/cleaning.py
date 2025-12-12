@@ -8,6 +8,59 @@ import pandas as pd
 
 PREFIX_GROUPS = ["is_", "has_", "skill_", "benefit_", "soft_", "domain_", "role_"]
 
+# Declarative missingness handling rules
+# Only explicit categorical columns are filled with "unknown" to preserve
+# semantic categories where "не указано" is meaningful. Everything else keeps
+# NaN for honest coverage in EDA.
+CATEGORICAL_IMPUTE_MAP: Dict[str, str] = {
+    "grade": "unknown",
+    "work_format": "unknown",
+    "work_mode": "unknown",
+    "employment_type": "unknown",
+    "schedule": "unknown",
+    "city_tier": "unknown",
+    "lang_english_level": "unknown",
+    "employer_type": "unknown",
+}
+
+# Numeric imputations are only allowed for explicit counters. Salary/rating
+# values are intentionally left as NaN to reflect missingness in the source.
+NUMERIC_IMPUTE_RULES: Dict[str, float | int] = {
+    # Employer/platform counters
+    "employer_reviews_count": 0,
+    # Text structure counters
+    "description_bullets_count": 0,
+    "description_paragraphs_count": 0,
+    "requirements_count": 0,
+    "responsibilities_count": 0,
+    "must_have_skills_count": 0,
+    "optional_skills_count": 0,
+    # Boolean aggregation counters
+    "role_count": 0,
+    "skills_count": 0,
+    "benefits_count": 0,
+    "soft_skills_count": 0,
+    "hard_stack_count": 0,
+    "core_data_skills_count": 0,
+    "ml_stack_count": 0,
+    "tech_stack_size": 0,
+    # Location/transport counters
+    "metro_count": 0,
+    # Language/other counters
+    "lang_other_count": 0,
+}
+
+KEY_COLUMN_COMMENTS: Dict[str, str] = {
+    "salary_from": "зарплата отсутствует в исходной вакансии",
+    "salary_to": "зарплата отсутствует в исходной вакансии",
+    "employer_rating": "отзывов/рейтинга на hh нет",
+    "salary_mid": "расчёт от исходной вилки; NaN если вилка не указана",
+    "work_mode": '"unknown" = формат работы не распознан',
+    "work_format": '"unknown" = формат работы не распознан',
+    "grade": '"unknown" = грейд не удалось определить',
+    "lang_english_level": '"unknown" = нет явного требования по английскому',
+}
+
 # Unified markers that represent unknown or missing text values
 UNKNOWN_MARKERS = {
     "unknown",
@@ -191,23 +244,24 @@ def _coerce_boolean_like_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[s
 
 
 def _fill_categorical_missing(
-    df: pd.DataFrame, exclude: Iterable[str] | None = None
+    df: pd.DataFrame, fill_map: Dict[str, str] | None = None
 ) -> Tuple[pd.DataFrame, List[str]]:
-    """Fill missing values in categorical/object columns with 'unknown'."""
+    """Fill missing values in selected categorical/object columns."""
 
-    exclude_set = set(exclude or [])
+    if fill_map is None:
+        fill_map = {}
+
     filled_cols: List[str] = []
 
-    for col in df.columns:
-        if col in exclude_set:
+    for col, fill_value in fill_map.items():
+        if col not in df.columns:
             continue
         dtype_str = str(df[col].dtype)
         if dtype_str != "object" and not dtype_str.startswith("category"):
             continue
-        df[col] = df[col].fillna("unknown")
-        if dtype_str == "object" and df[col].str.len().max() > 100:
-            df[col] = df[col].replace("unknown", "").fillna("")
-        filled_cols.append(col)
+        if df[col].isna().any():
+            df[col] = df[col].fillna(fill_value)
+            filled_cols.append(col)
 
     return df, filled_cols
 
@@ -251,15 +305,29 @@ def standardize_unknown_markers(
     return df, affected
 
 
-def _fill_numeric_missing(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
-    """Fill missing numeric columns with median values."""
+def _fill_numeric_missing(
+    df: pd.DataFrame, fill_map: Dict[str, float | int] | None = None
+) -> Tuple[pd.DataFrame, List[str]]:
+    """Fill missing numeric columns according to explicit rules."""
+
+    if fill_map is None:
+        fill_map = {}
 
     filled_cols: List[str] = []
     numeric_cols = df.select_dtypes(include=["number"]).columns
     for col in numeric_cols:
-        if df[col].isna().any():
-            df[col] = df[col].fillna(df[col].median())
-            filled_cols.append(col)
+        fill_value: float | int | None = None
+
+        if col in fill_map:
+            fill_value = fill_map[col]
+        elif col.endswith("_count"):
+            fill_value = 0
+
+        if fill_value is None or not df[col].isna().any():
+            continue
+
+        df[col] = df[col].fillna(fill_value)
+        filled_cols.append(col)
     return df, filled_cols
 
 
@@ -362,8 +430,10 @@ def handle_missingness(df: pd.DataFrame, drop_threshold: float = 0.95) -> pd.Dat
     df, normalized_unknown_cols = standardize_unknown_markers(df)
     df, dropped_cols = _drop_mostly_missing_columns(df, threshold=drop_threshold)
     df, bool_like_cols = _coerce_boolean_like_columns(df)
-    df, filled_categorical_cols = _fill_categorical_missing(df, exclude=bool_like_cols)
-    df, filled_numeric_cols = _fill_numeric_missing(df)
+    df, filled_categorical_cols = _fill_categorical_missing(
+        df, fill_map=CATEGORICAL_IMPUTE_MAP
+    )
+    df, filled_numeric_cols = _fill_numeric_missing(df, fill_map=NUMERIC_IMPUTE_RULES)
 
     df.attrs["normalized_unknown_cols"] = normalized_unknown_cols
     df.attrs["dropped_cols"] = dropped_cols
@@ -427,24 +497,29 @@ def summarize_data_health(df: pd.DataFrame, prefix: str = "") -> pd.DataFrame:
         dtype_str = str(series.dtype)
         nan_share = float(series.isna().mean())
 
-        unknown_mask = series.apply(
-            lambda v: isinstance(v, str) and v.strip().lower() in markers_set
-        )
-        unknown_share = float(unknown_mask.mean())
+        marker_share = 0.0
+        if dtype_str == "object" or dtype_str.startswith("category"):
+            marker_mask = series.apply(
+                lambda v: isinstance(v, str) and v.strip().lower() in markers_set
+            )
+            marker_share = float(marker_mask.mean())
 
         comment_parts: List[str] = []
+        base_comment = KEY_COLUMN_COMMENTS.get(col)
+        if base_comment:
+            comment_parts.append(base_comment)
         if nan_share > 0:
             comment_parts.append(f"NaN {nan_share:.1%}")
-        if unknown_share > 0:
-            comment_parts.append(f"text unknown {unknown_share:.1%}")
+        if marker_share > 0:
+            comment_parts.append(f"text marker {marker_share:.1%}")
 
-        comment = ", ".join(comment_parts) if comment_parts else "clean"
+        comment = "; ".join(comment_parts) if comment_parts else "clean"
         records.append(
             {
                 "column": f"{prefix}{col}" if prefix else col,
                 "dtype": dtype_str,
                 "share_nan": nan_share,
-                "share_unknown_marker": unknown_share,
+                "share_unknown_marker": marker_share,
                 "comment": comment,
             }
         )
