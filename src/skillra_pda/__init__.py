@@ -2,7 +2,7 @@
 
 # Re-export commonly used modules and helpers to simplify notebook imports.
 from . import cleaning, config, eda, features, io, market, personas, viz  # noqa: F401
-from .cleaning import ensure_salary_gross_boolean  # noqa: F401
+from .cleaning import ensure_salary_gross_boolean, summarize_data_health  # noqa: F401
 from .eda import (  # noqa: F401
     benefits_summary_by_company,
     benefits_summary_by_grade,
@@ -51,6 +51,7 @@ __all__ = [
     "personas",
     "viz",
     "ensure_salary_gross_boolean",
+    "summarize_data_health",
     "junior_friendly_share",
     "junior_friendly_share_by_segment",
     "salary_by_city_tier",
