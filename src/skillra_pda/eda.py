@@ -11,6 +11,22 @@ def missing_share(df: pd.DataFrame, top_n: int = 20) -> pd.Series:
     return df.isna().mean().sort_values(ascending=False).head(top_n)
 
 
+def hard_skill_columns(df: pd.DataFrame) -> list[str]:
+    """Return hard skill columns combining skill_* and relevant has_* flags."""
+
+    skill_cols = [col for col in df.columns if col.startswith("skill_")]
+    has_cols = [col for col in df.columns if col.startswith("has_")]
+
+    excluded = {
+        "has_metro",
+        "has_test_task",
+        "has_mentoring",
+    }
+    has_skill_cols = [col for col in has_cols if col not in excluded]
+
+    return sorted(set(skill_cols + has_skill_cols))
+
+
 def describe_salary_by_group(
     df: pd.DataFrame, group_col: str, salary_col: str = "salary_mid_rub_capped", top_n: int | None = None
 ) -> pd.DataFrame:

@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 import matplotlib.pyplot as plt
 import pandas as pd
 
 from .config import FIGURES_DIR, ensure_directories
+from . import eda as eda_mod
 
 
 ensure_directories()
@@ -143,22 +144,39 @@ def remote_share_by_role_bar(remote_df: pd.DataFrame, return_fig: bool = False):
 
 def top_skills_bar(
     df: pd.DataFrame,
-    skill_cols: Iterable[str],
+    skill_cols: Sequence[str] | None = None,
     role_filter: str = "data",
     top_n: int = 15,
     return_fig: bool = False,
 ):
     _require_columns(df, ["primary_role"], "top_skills_bar")
-    missing_skills = [c for c in skill_cols if c not in df.columns]
+
+    resolved_skill_cols = list(skill_cols) if skill_cols is not None else eda_mod.hard_skill_columns(df)
+    missing_skills = [c for c in resolved_skill_cols if c not in df.columns]
     if missing_skills:
         raise ValueError(f"top_skills_bar: expected skill columns {missing_skills} to be present")
+
     role_mask = df["primary_role"].str.contains(role_filter, case=False, na=False)
-    freq = df.loc[role_mask, skill_cols].sum().sort_values(ascending=False).head(top_n)
+    subset = df.loc[role_mask, resolved_skill_cols]
+    if subset.empty:
+        raise ValueError("top_skills_bar: no rows match the provided role_filter")
+
+    numeric = subset.apply(pd.to_numeric, errors="coerce").fillna(0)
+    counts = numeric.sum().sort_values(ascending=False).head(top_n)
+    shares = counts / len(subset)
+    stats = pd.DataFrame({"count": counts, "share": shares}).sort_values(by="share", ascending=False)
+
     fig, ax = plt.subplots(figsize=BAR_FIGSIZE)
-    freq.plot(kind="bar", ax=ax)
-    ax.set_ylabel("Количество упоминаний")
+    bars = ax.bar(stats.index, stats["share"] * 100, color="steelblue")
+    ax.set_ylabel("Доля вакансий с навыком, %")
     ax.set_xlabel("Навык")
-    ax.set_title(f"Топ-{top_n} навыков для ролей с фильтром '{role_filter}'")
+    ax.set_title(f"Топ-{top_n} навыков для ролей с фильтром «{role_filter}»")
+    ax.tick_params(axis="x", rotation=45, labelrotation=45)
+
+    for bar, count in zip(bars, stats["count"]):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width() / 2, height, f"{count:.0f}", ha="center", va="bottom", fontsize=8)
+
     return _finalize_figure(fig, "fig_top_skills_data_bar.png", return_fig)
 
 
