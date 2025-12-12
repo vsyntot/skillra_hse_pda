@@ -22,44 +22,167 @@ DEFAULT_TIMEOUT = int(os.environ.get("NBEXEC_TIMEOUT", "900"))
 OUTPUT_HTML = config.NOTEBOOK_REPORTS_DIR / "01_hse_project.html"
 
 CUSTOM_CSS = """
+:root {
+    color-scheme: light;
+}
+
 body {
-    font-family: "Segoe UI", Arial, sans-serif;
-    margin: 24px;
-    line-height: 1.6;
+    font-family: "Inter", "Segoe UI", Arial, sans-serif;
+    background: #f8fafc;
+    color: #0f172a;
+    margin: 0;
+    line-height: 1.7;
 }
-h1, h2, h3 {
-    font-weight: 600;
-    margin-top: 28px;
+
+.jp-Notebook {
+    max-width: 1120px;
+    margin: 32px auto 48px auto;
+    padding: 32px 44px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+h1, h2, h3, h4 {
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.25;
+}
+
+h1 {
+    font-size: 2.1rem;
+    margin-top: 12px;
     margin-bottom: 12px;
+    letter-spacing: -0.02em;
 }
-#toc-container {
-    background: #f5f7fb;
-    border: 1px solid #e1e5f2;
-    border-radius: 8px;
-    padding: 16px 18px;
-    margin-bottom: 24px;
+
+h2 {
+    font-size: 1.55rem;
+    margin-top: 28px;
+    margin-bottom: 14px;
 }
-#toc-container ul {
-    list-style: none;
-    padding-left: 0;
-    margin: 8px 0 0 0;
+
+h3 {
+    font-size: 1.2rem;
+    margin-top: 24px;
+    margin-bottom: 10px;
 }
-#toc-container li {
-    margin: 4px 0;
+
+p, li {
+    font-size: 1rem;
+    margin: 0 0 12px 0;
 }
-#toc-container a {
+
+ul, ol {
+    padding-left: 22px;
+}
+
+a {
     color: #1d4ed8;
     text-decoration: none;
 }
-#toc-container a:hover {
+
+a:hover {
     text-decoration: underline;
 }
-.jp-OutputArea img, .jp-OutputArea canvas, .jp-OutputArea svg {
+
+#toc-container {
+    max-width: 1120px;
+    margin: 32px auto 18px auto;
+    background: #f5f7fb;
+    border: 1px solid #e1e5f2;
+    border-radius: 12px;
+    padding: 18px 20px;
+    box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
+}
+
+#toc-container h2 {
+    margin: 0 0 8px 0;
+    font-size: 1.2rem;
+}
+
+#toc-container ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 6px 0 0 0;
+}
+
+#toc-container li {
+    margin: 6px 0;
+    color: #334155;
+}
+
+#toc-container li ul {
+    margin-left: 14px;
+    border-left: 2px solid #e2e8f0;
+    padding-left: 12px;
+}
+
+#toc-container a {
+    color: #0f172a;
+}
+
+#toc-container a:hover {
+    color: #1d4ed8;
+}
+
+.jp-Cell:not(.jp-MarkdownCell) {
+    border: none;
+}
+
+.jp-OutputArea {
+    padding: 4px 0 20px 0;
+}
+
+.jp-OutputArea img,
+.jp-OutputArea canvas,
+.jp-OutputArea svg {
+    display: block;
     max-width: 100%;
     height: auto;
+    margin: 8px auto;
+    border-radius: 10px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
-.jp-Cell-outputArea {
-    padding: 8px 0 16px 0;
+
+.jp-RenderedHTMLCommon table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0 20px 0;
+    font-size: 0.96rem;
+}
+
+.jp-RenderedHTMLCommon th,
+.jp-RenderedHTMLCommon td {
+    border: 1px solid #e2e8f0;
+    padding: 10px 12px;
+}
+
+.jp-RenderedHTMLCommon th {
+    background: #f8fafc;
+    text-align: left;
+    font-weight: 700;
+}
+
+blockquote {
+    margin: 14px 0;
+    padding: 12px 16px;
+    background: #f1f5f9;
+    border-left: 4px solid #1d4ed8;
+    color: #334155;
+}
+
+@media (max-width: 900px) {
+    .jp-Notebook {
+        padding: 22px 18px;
+        margin: 12px;
+    }
+
+    #toc-container {
+        margin: 16px 12px;
+        padding: 14px 16px;
+    }
 }
 """
 
@@ -72,21 +195,53 @@ TOC_SNIPPET = """
 document.addEventListener('DOMContentLoaded', () => {
   const tocList = document.getElementById('toc-list');
   if (!tocList) return;
+
   const headings = Array.from(document.querySelectorAll('h1, h2'));
+  const slugCounts = {};
+
+  const slugify = (text) => {
+    const base = text.toLowerCase().replace(/[^a-z0-9\u0400-\u04ff]+/g, '-').replace(/(^-|-$)/g, '');
+    const count = slugCounts[base] ?? 0;
+    slugCounts[base] = count + 1;
+    return count ? `${base}-${count}` : base;
+  };
+
+  let currentSection;
+
   headings.forEach((h) => {
     const text = h.textContent?.trim();
     if (!text) return;
+
     if (!h.id) {
-      const slug = text.toLowerCase().replace(/[^a-z0-9\u0400-\u04ff]+/g, '-').replace(/(^-|-$)/g, '');
-      h.id = slug;
+      h.id = slugify(text);
     }
-    const li = document.createElement('li');
-    if (h.tagName === 'H2') li.style.marginLeft = '12px';
-    const link = document.createElement('a');
-    link.textContent = text;
-    link.href = `#${h.id}`;
-    li.appendChild(link);
-    tocList.appendChild(li);
+
+    if (h.tagName === 'H1') {
+      const li = document.createElement('li');
+      li.classList.add('toc-level-1');
+      const link = document.createElement('a');
+      link.textContent = text;
+      link.href = `#${h.id}`;
+      li.appendChild(link);
+
+      const nested = document.createElement('ul');
+      nested.classList.add('toc-sublist');
+      li.appendChild(nested);
+      tocList.appendChild(li);
+      currentSection = nested;
+      return;
+    }
+
+    if (h.tagName === 'H2') {
+      const targetList = currentSection || tocList;
+      const li = document.createElement('li');
+      li.classList.add('toc-level-2');
+      const link = document.createElement('a');
+      link.textContent = text;
+      link.href = `#${h.id}`;
+      li.appendChild(link);
+      targetList.appendChild(li);
+    }
   });
 });
 </script>
@@ -120,10 +275,17 @@ def export_to_html(nb: nbformat.NotebookNode) -> str:
     exporter.exclude_input = True
     exporter.exclude_input_prompt = True
     exporter.exclude_output_prompt = True
+    exporter.embed_images = True
 
     resources = {
         "metadata": {"name": NOTEBOOK.stem},
         "inlining": {"css": [CUSTOM_CSS]},
+        "config": {
+            "InlineBackend": {
+                "figure_format": "png",
+                "rc": {"figure.dpi": 110},
+            }
+        },
     }
 
     body, _ = exporter.from_notebook_node(nb, resources=resources)
@@ -140,10 +302,11 @@ def main() -> None:
 
     executed_nb = execute_notebook()
     html = export_to_html(executed_nb)
-    OUTPUT_HTML.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_HTML.write_text(html, encoding="utf-8")
+    html_path = OUTPUT_HTML.resolve()
+    html_path.parent.mkdir(parents=True, exist_ok=True)
+    html_path.write_text(html, encoding="utf-8")
 
-    print(f"HTML-отчёт сохранён в {OUTPUT_HTML}")
+    print(f"HTML-отчёт сохранён в {html_path}")
 
 
 if __name__ == "__main__":
