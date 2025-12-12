@@ -3,11 +3,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping
+from typing import Any, Dict, List, Mapping, Sequence
 
 import pandas as pd
 
-from . import config
+from . import config, eda
+
+
+MIN_MARKET_N = 80
 
 
 @dataclass
@@ -43,6 +46,8 @@ class Persona:
 
 __all__ = [
     "Persona",
+    "PersonaFilterResult",
+    "MIN_MARKET_N",
     "build_skill_demand_profile",
     "skill_gap_for_persona",
     "analyze_persona",
@@ -53,10 +58,40 @@ __all__ = [
 ]
 
 
-def _filter_by_target(df: pd.DataFrame, persona: Persona) -> pd.DataFrame:
-    """Filter a dataframe by persona targets and constraints."""
+@dataclass
+class PersonaFilterResult:
+    filtered_df: pd.DataFrame
+    applied_filters: Dict[str, object]
+    relaxed_filters: List[str]
+    warnings: List[str]
+    min_market_n: int = MIN_MARKET_N
 
-    filtered = df.copy()
+    @property
+    def sample_size(self) -> int:
+        return len(self.filtered_df)
+
+
+def _apply_filters(df: pd.DataFrame, filters: Sequence[tuple[str, object]]):
+    filtered = df
+    applied: Dict[str, object] = {}
+    for col, value in filters:
+        if col not in filtered.columns:
+            continue
+        if isinstance(value, (list, tuple, set)):
+            filtered = filtered[filtered[col].isin(value)]
+        else:
+            filtered = filtered[filtered[col] == value]
+        applied[col] = value
+    return filtered, applied
+
+
+def _filter_by_target(
+    df: pd.DataFrame, persona: Persona, min_market_n: int | None = None
+) -> PersonaFilterResult:
+    """Filter a dataframe by persona targets and constraints with fallback."""
+
+    threshold = MIN_MARKET_N if min_market_n is None else min_market_n
+    filter_specs: list[tuple[str, object]] = []
     mapping: Mapping[str, Any] = {
         "primary_role": persona.target_role,
         "grade": persona.target_grade,
@@ -64,21 +99,59 @@ def _filter_by_target(df: pd.DataFrame, persona: Persona) -> pd.DataFrame:
         "work_mode": persona.target_work_mode,
     }
     for col, value in mapping.items():
-        if value is None or col not in filtered.columns:
+        if value is None:
             continue
-        if isinstance(value, (list, tuple, set)):
-            filtered = filtered[filtered[col].isin(value)]
-        else:
-            filtered = filtered[filtered[col] == value]
+        filter_specs.append((col, value))
 
     for key, value in persona.constraints.items():
-        if key not in filtered.columns:
+        filter_specs.append((key, value))
+
+    active_filters = filter_specs.copy()
+    filtered, applied = _apply_filters(df, active_filters)
+    relaxed_filters: list[str] = []
+    warnings: list[str] = []
+
+    if threshold and filtered.empty:
+        warnings.append(
+            f"После применения фильтров сегмент пустой; порог стабильности {threshold} вакансий"
+        )
+
+    relax_order: list[str] = list(persona.constraints.keys()) + [
+        "work_mode",
+        "city_tier",
+        "grade",
+        "primary_role",
+    ]
+
+    can_relax = bool(threshold and len(df) >= threshold and len(filtered) < threshold)
+
+    for relax_key in relax_order if can_relax else []:
+        if len(filtered) >= threshold:
+            break
+        idx = next((i for i, (col, _) in enumerate(active_filters) if col == relax_key), None)
+        if idx is None:
             continue
-        if isinstance(value, (list, tuple, set)):
-            filtered = filtered[filtered[key].isin(value)]
-        else:
-            filtered = filtered[filtered[key] == value]
-    return filtered
+        active_filters.pop(idx)
+        relaxed_filters.append(relax_key)
+        filtered, applied = _apply_filters(df, active_filters)
+
+    if threshold and len(filtered) < threshold:
+        warnings.append(
+            "Сегмент меньше минимального размера "
+            f"(n={len(filtered)}, min_market_n={threshold})."
+        )
+    if relaxed_filters:
+        warnings.append(
+            "Ослаблены фильтры для стабильности: " + ", ".join(relaxed_filters)
+        )
+
+    return PersonaFilterResult(
+        filtered_df=filtered,
+        applied_filters=applied,
+        relaxed_filters=relaxed_filters,
+        warnings=warnings,
+        min_market_n=threshold,
+    )
 
 
 def build_skill_demand_profile(
@@ -86,16 +159,30 @@ def build_skill_demand_profile(
     persona: Persona,
     skill_prefixes: tuple[str, ...] = ("has_", "skill_"),
     min_share: float = 0.05,
+    skill_cols: list[str] | None = None,
+    min_market_n: int | None = None,
+    filter_result: PersonaFilterResult | None = None,
 ) -> pd.DataFrame:
     """Compute market demand for skills in the persona's target segment."""
 
-    df_filtered = _filter_by_target(df, persona)
+    result = filter_result or _filter_by_target(df, persona, min_market_n=min_market_n)
+    df_filtered = result.filtered_df
     if df_filtered.empty:
         return pd.DataFrame(columns=["skill_name", "market_share"])
 
-    skill_cols = [c for c in df_filtered.columns if c.startswith(skill_prefixes)]
+    resolved_skill_cols = (
+        skill_cols
+        if skill_cols is not None
+        else [
+            c
+            for c in eda.hard_skill_columns(df_filtered)
+            if c.startswith(skill_prefixes)
+        ]
+    )
+    if not resolved_skill_cols:
+        return pd.DataFrame(columns=["skill_name", "market_share"])
     rows: list[dict[str, object]] = []
-    for col in skill_cols:
+    for col in resolved_skill_cols:
         series = df_filtered[col].fillna(False)
         try:
             share = series.astype(bool).mean()
@@ -117,6 +204,8 @@ def skill_gap_for_persona(
     skill_cols: List[str] | None = None,
     min_share: float = 0.1,
     top_n: int | None = 20,
+    min_market_n: int | None = None,
+    filter_result: PersonaFilterResult | None = None,
 ) -> pd.DataFrame:
     """
     Calculate market share of skills for persona targets and mark gaps.
@@ -124,21 +213,50 @@ def skill_gap_for_persona(
     Returns columns: skill_name, market_share, persona_has (bool), gap (bool).
     """
 
+    result = filter_result or _filter_by_target(df, persona, min_market_n=min_market_n)
     demand = build_skill_demand_profile(
-        df, persona, skill_prefixes=("has_", "skill_"), min_share=min_share
+        df,
+        persona,
+        skill_prefixes=("has_", "skill_"),
+        min_share=min_share,
+        skill_cols=skill_cols,
+        min_market_n=min_market_n,
+        filter_result=result,
     )
     if skill_cols:
         demand = demand[demand["skill_name"].isin(skill_cols)]
 
     if demand.empty:
-        return pd.DataFrame(columns=["skill_name", "market_share", "persona_has", "gap"])
+        gap_df = pd.DataFrame(
+            columns=["skill_name", "market_share", "persona_has", "gap"]
+        )
+        gap_df.attrs.update(
+            {
+                "market_n": result.sample_size,
+                "applied_filters": result.applied_filters,
+                "relaxed_filters": result.relaxed_filters,
+                "warnings": result.warnings,
+                "min_market_n": result.min_market_n,
+            }
+        )
+        return gap_df
 
     demand["persona_has"] = demand["skill_name"].isin(persona.current_skills)
     demand["gap"] = ~demand["persona_has"] & (demand["market_share"] >= min_share)
-    demand_sorted = demand.sort_values(by="market_share", ascending=False)
+    demand_sorted = demand.sort_values(by=["gap", "market_share"], ascending=[False, False])
     if top_n is not None:
         demand_sorted = demand_sorted.head(top_n)
-    return demand_sorted.reset_index(drop=True)
+    gap_df = demand_sorted.reset_index(drop=True)
+    gap_df.attrs.update(
+        {
+            "market_n": result.sample_size,
+            "applied_filters": result.applied_filters,
+            "relaxed_filters": result.relaxed_filters,
+            "warnings": result.warnings,
+            "min_market_n": result.min_market_n,
+        }
+    )
+    return gap_df
 
 
 def analyze_persona(df: pd.DataFrame, persona: Persona, top_k: int = 10) -> dict:
@@ -150,9 +268,11 @@ def analyze_persona(df: pd.DataFrame, persona: Persona, top_k: int = 10) -> dict
     * ``recommended_skills`` — ordered list of missing skills to focus on.
     """
 
-    df_filtered = _filter_by_target(df, persona)
+    filter_result = _filter_by_target(df, persona)
+    df_filtered = filter_result.filtered_df
     market_summary: dict[str, object] = {
         "vacancy_count": len(df_filtered),
+        "min_market_n": filter_result.min_market_n,
     }
     salary_col = "salary_mid_rub_capped" if "salary_mid_rub_capped" in df_filtered.columns else None
     if salary_col:
@@ -171,11 +291,21 @@ def analyze_persona(df: pd.DataFrame, persona: Persona, top_k: int = 10) -> dict
         )
 
     demand_df = build_skill_demand_profile(
-        df_filtered, persona, skill_prefixes=("has_", "skill_"), min_share=0.05
+        df,
+        persona,
+        skill_prefixes=("has_", "skill_"),
+        min_share=0.05,
+        filter_result=filter_result,
     )
     top_demand = demand_df.head(top_k) if not demand_df.empty else pd.DataFrame()
 
-    gap_df = skill_gap_for_persona(df_filtered, persona, min_share=0.05, top_n=top_k)
+    gap_df = skill_gap_for_persona(
+        df,
+        persona,
+        min_share=0.05,
+        top_n=top_k,
+        filter_result=filter_result,
+    )
     recommended_skills: list[str] = gap_df.loc[gap_df["gap"], "skill_name"].head(top_k).tolist()
 
     return {
@@ -183,6 +313,8 @@ def analyze_persona(df: pd.DataFrame, persona: Persona, top_k: int = 10) -> dict
         "skill_gap": gap_df,
         "recommended_skills": recommended_skills,
         "top_skill_demand": top_demand,
+        "applied_filters": filter_result.applied_filters,
+        "warnings": filter_result.warnings,
     }
 
 
@@ -205,10 +337,28 @@ def plot_persona_skill_gap(
 
     top_missing = missing.sort_values(by="market_share", ascending=False)
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.barh(top_missing["skill_name"], top_missing["market_share"])
+    shares_pct = top_missing["market_share"] * 100
+    bars = ax.barh(top_missing["skill_name"], shares_pct)
     ax.invert_yaxis()
-    ax.set_xlabel("Доля вакансий с навыком")
-    ax.set_title(f"Skill gap для персоны: {persona.name}")
+    ax.set_xlabel("Доля вакансий с навыком, %")
+
+    for bar, share in zip(bars, shares_pct):
+        ax.text(
+            bar.get_width() + 0.5,
+            bar.get_y() + bar.get_height() / 2,
+            f"{share:.1f}%",
+            va="center",
+            fontsize=9,
+        )
+
+    market_n = gap_df.attrs.get("market_n")
+    relaxed = gap_df.attrs.get("relaxed_filters") or []
+    title_parts = [f"Skill gap для персоны: {persona.name}"]
+    if market_n is not None:
+        title_parts.append(f"n={market_n}")
+    if relaxed:
+        title_parts.append("ослаблены: " + ", ".join(relaxed))
+    ax.set_title(" | ".join(title_parts))
 
     output_dir = output_dir or config.FIGURES_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -233,8 +383,8 @@ DATA_STUDENT = Persona(
     current_skills=["skill_sql", "skill_excel", "has_python"],
     target_role="analyst",
     target_grade="junior",
-    target_city_tier="Moscow",
-    target_work_mode="remote",
+    target_city_tier=None,
+    target_work_mode=None,
 )
 
 SWITCHER_BI = Persona(
