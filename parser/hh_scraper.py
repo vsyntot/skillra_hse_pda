@@ -125,13 +125,20 @@ EXPERIENCE_SHARDS: Sequence[Optional[str]] = (
 )
 
 GRADE_KEYWORDS = {
-    "intern": ["intern", "стажер", "стажёр"],
-    "junior": ["junior", "младший", "джуниор", "джун"],
-    "middle": ["middle", "мидл", "middle+", "mid"],
-    "senior": ["senior", "сеньор", "senior+", "синьор", "старший"],
-    "lead": ["lead", "тимлид", "тим лид", "team lead", "tech lead", "ведущий"],
-    "architect": ["architect", "архитектор"],
+    "intern": [r"\bintern\b", r"\bстаж[её]р\b"],
+    "junior": [r"\bjunior\b", r"\bмладший\b", r"\bджуниор\b", r"\bджун\b"],
+    "middle": [r"\bmiddle\+?\b", r"\bмидл\b", r"\bmid\b"],
+    "senior": [r"\bsenior\+?\b", r"\bсеньор\b", r"\bсиньор\b", r"\bстарший\b"],
+    "lead": [
+        r"\bteam\s*lead\b",
+        r"\btech(nical)?\s*lead\b",
+        r"\bтим[- ]?лид\b",
+        r"\bведущ(ий|ая)\b",
+    ],
+    "architect": [r"\barchitect\b", r"\bархитектор\b"],
 }
+
+LEAD_STOPWORDS = ["lead generation", "лидогенера"]
 
 ROLE_KEYWORDS = {
     "role_backend": ["backend", "back-end", "бекенд", "бэкенд"],
@@ -456,9 +463,14 @@ def parse_experience_range(experience: str) -> Tuple[Optional[int], Optional[int
 
 
 def detect_grade(text: str) -> str:
+    lowered = text.lower()
+    for stopword in LEAD_STOPWORDS:
+        if stopword in lowered:
+            lowered = lowered.replace(stopword, "")
+
     for grade, patterns in GRADE_KEYWORDS.items():
         for pat in patterns:
-            if pat in text:
+            if re.search(pat, lowered):
                 return grade
     return "unknown"
 
