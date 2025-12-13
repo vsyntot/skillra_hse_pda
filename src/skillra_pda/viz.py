@@ -15,6 +15,16 @@ ensure_directories()
 
 BAR_FIGSIZE = (10, 6)
 HEATMAP_FIGSIZE = (10, 7)
+GRADE_ORDER = ["intern", "junior", "middle", "senior", "lead", "unknown"]
+ENGLISH_ORDER = ["no_english", "A1", "A2", "B1", "B2", "C1_plus", "unknown"]
+WORK_MODE_ORDER = ["office", "hybrid", "remote", "field", "unknown"]
+
+
+def _ordered_categories(categories: Iterable[str], order: Sequence[str]) -> list[str]:
+    existing = [str(cat) for cat in categories]
+    ordered = [cat for cat in order if cat in existing]
+    remaining = [cat for cat in existing if cat not in ordered]
+    return ordered + remaining
 
 
 def _save_fig(fig: plt.Figure, filename: str | Path, close: bool = True) -> Path:
@@ -45,8 +55,12 @@ def salary_by_grade_box(
     df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped", return_fig: bool = False
 ):
     _require_columns(df, ["grade", salary_col], "salary_by_grade_box")
+    df_local = df.copy()
+    df_local["grade"] = pd.Categorical(
+        df_local["grade"], categories=_ordered_categories(df_local["grade"].unique(), GRADE_ORDER), ordered=True
+    )
     fig, ax = plt.subplots(figsize=BAR_FIGSIZE)
-    df.boxplot(column=salary_col, by="grade", ax=ax)
+    df_local.boxplot(column=salary_col, by="grade", ax=ax)
     ax.set_title("Зарплаты по грейдам")
     ax.set_xlabel("Грейд")
     ax.set_ylabel("Зарплата (RUB, с каппингом)")
@@ -79,6 +93,8 @@ def salary_by_grade_city_heatmap(
 
     _require_columns(summary_df, ["grade", "city_tier", value_col], "salary_by_grade_city_heatmap")
     pivot = summary_df.pivot(index="grade", columns="city_tier", values=value_col)
+    ordered_index = _ordered_categories(pivot.index, GRADE_ORDER)
+    pivot = pivot.reindex(ordered_index)
     if pivot.empty:
         raise ValueError("salary_by_grade_city_heatmap: got empty pivot table")
 
@@ -96,7 +112,12 @@ def salary_by_grade_city_heatmap(
 
 def work_mode_share_by_city(df: pd.DataFrame, return_fig: bool = False):
     _require_columns(df, ["city_tier", "work_mode"], "work_mode_share_by_city")
-    pivot = pd.crosstab(df["city_tier"], df["work_mode"], normalize="index")
+    df_local = df.copy()
+    df_local["work_mode"] = pd.Categorical(
+        df_local["work_mode"], categories=_ordered_categories(df_local["work_mode"].unique(), WORK_MODE_ORDER), ordered=True
+    )
+    pivot = pd.crosstab(df_local["city_tier"], df_local["work_mode"], normalize="index")
+    pivot = pivot[_ordered_categories(pivot.columns, WORK_MODE_ORDER)]
     fig, ax = plt.subplots(figsize=BAR_FIGSIZE)
     pivot.plot(kind="bar", stacked=True, ax=ax)
     ax.set_ylabel("Доля вакансий")
@@ -113,6 +134,7 @@ def salary_by_role_work_mode_heatmap(
 
     _require_columns(summary_df, ["primary_role", "work_mode", value_col], "salary_by_role_work_mode_heatmap")
     pivot = summary_df.pivot(index="primary_role", columns="work_mode", values=value_col)
+    pivot = pivot[_ordered_categories(pivot.columns, WORK_MODE_ORDER)]
     if pivot.empty:
         raise ValueError("salary_by_role_work_mode_heatmap: got empty pivot table")
 
@@ -209,16 +231,17 @@ def corr_heatmap(corr: pd.DataFrame, return_fig: bool = False):
 def skill_heatmap(
     df: pd.DataFrame,
     index_col: str,
-    skill_cols: Iterable[str],
     title: str,
     filename: str,
+    skill_cols: Iterable[str] | None = None,
     top_n: int = 20,
     return_fig: bool = False,
 ) -> Path | tuple[plt.Figure, Path]:
     """Plot heatmap of skill prevalence across a categorical segment."""
 
     _require_columns(df, [index_col], "skill_heatmap")
-    present_skills = [col for col in skill_cols if col in df.columns]
+    resolved_skills = eda_mod.hard_skill_columns(df) if skill_cols is None else list(skill_cols)
+    present_skills = [col for col in resolved_skills if col in df.columns]
     if not present_skills:
         raise ValueError("skill_heatmap: expected at least one skill column")
 
@@ -262,6 +285,10 @@ def salary_mean_and_count_bar(
     top = agg.sort_values(by="count", ascending=False).head(top_n)
     if top.empty:
         raise ValueError("salary_mean_and_count_bar: no data after aggregation")
+
+    if category_col == "grade":
+        ordered_index = _ordered_categories(top.index, GRADE_ORDER)
+        top = top.reindex(ordered_index).dropna(how="all")
 
     fig, ax1 = plt.subplots(figsize=figsize)
     ax1.bar(top.index, top["median"], color="steelblue")
@@ -435,7 +462,10 @@ def salary_by_english_level_plot(
     if summary.empty:
         raise ValueError("salary_by_english_level_plot: expected lang_* columns and salary data")
 
-    ordered = summary.sort_values(by="salary_median", ascending=False)
+    summary["english_level"] = pd.Categorical(
+        summary["english_level"], categories=_ordered_categories(summary["english_level"], ENGLISH_ORDER), ordered=True
+    )
+    ordered = summary.sort_values(by="english_level")
     fig, ax = plt.subplots(figsize=BAR_FIGSIZE)
     ax.bar(ordered["english_level"], ordered["salary_median"], color="steelblue")
     ax.set_ylabel("Медианная зарплата (RUB)")
@@ -483,7 +513,8 @@ def heatmap_skills_by_grade(
     if skill_share.columns.empty or skill_share.index.empty:
         raise ValueError("heatmap_skills_by_grade: matrix must have both index and columns")
 
-    numeric = skill_share.astype(float)
+    ordered_cols = _ordered_categories(skill_share.columns, GRADE_ORDER)
+    numeric = skill_share[ordered_cols].astype(float)
     fig, ax = plt.subplots(figsize=figsize)
     cax = ax.imshow(numeric.values, aspect="auto", cmap="Blues")
     ax.set_xticks(range(len(numeric.columns)))

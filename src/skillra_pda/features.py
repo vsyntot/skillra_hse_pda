@@ -77,6 +77,67 @@ ML_STACK_SKILLS = [
 ]
 
 
+def _experience_to_grade(years: float | None, no_experience_flag: bool | None, raw: str | None) -> str:
+    """Infer grade bucket from experience markers."""
+
+    if isinstance(no_experience_flag, (bool, np.bool_)) and no_experience_flag:
+        return "intern"
+
+    if years is not None and not pd.isna(years):
+        if years < 1:
+            return "intern"
+        if years < 3:
+            return "junior"
+        if years < 5:
+            return "middle"
+        if years < 8:
+            return "senior"
+        return "lead"
+
+    if isinstance(raw, str):
+        raw_lower = raw.lower()
+        if "не треб" in raw_lower or "no experience" in raw_lower or "без опыта" in raw_lower:
+            return "intern"
+        if "1-3" in raw_lower or "1–3" in raw_lower or "1 to 3" in raw_lower:
+            return "junior"
+        if "3-6" in raw_lower or "3–6" in raw_lower or "3 to 6" in raw_lower:
+            return "middle"
+        if "6" in raw_lower:
+            return "senior"
+
+    return "unknown"
+
+
+def add_grade_from_experience(df: pd.DataFrame) -> pd.DataFrame:
+    """Derive grade_from_experience using exp_min/max and raw markers."""
+
+    df = df.copy()
+    min_years = pd.to_numeric(df.get("exp_min_years"), errors="coerce") if "exp_min_years" in df else None
+    max_years = pd.to_numeric(df.get("exp_max_years"), errors="coerce") if "exp_max_years" in df else None
+    base_years = None
+    if min_years is not None:
+        base_years = min_years
+        if max_years is not None:
+            base_years = base_years.fillna(max_years)
+    elif max_years is not None:
+        base_years = max_years
+    else:
+        base_years = pd.Series(pd.NA, index=df.index)
+
+    exp_flag = df.get("exp_is_no_experience") if "exp_is_no_experience" in df else None
+    raw_exp = df.get("experience") if "experience" in df else None
+
+    df["grade_from_experience"] = [
+        _experience_to_grade(
+            float(years) if years is not None and not pd.isna(years) else None,
+            exp_flag.iloc[i] if exp_flag is not None else None,
+            raw_exp.iloc[i] if raw_exp is not None else None,
+        )
+        for i, years in enumerate(base_years)
+    ]
+    return df
+
+
 def add_time_features(df: pd.DataFrame, date_col: str = "published_at_iso") -> pd.DataFrame:
     """Add weekday/month/is_weekend flags from the publication date and vacancy age."""
     if date_col in df.columns:
@@ -314,6 +375,8 @@ def ensure_expected_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
         "published_weekday": pd.NA,
         "city_tier": "unknown",
         "work_mode": "unknown",
+        "grade_from_experience": "unknown",
+        "grade_final": "unknown",
         "primary_role": "other",
         "salary_bucket": pd.NA,
         "vacancy_age_days": pd.NA,
@@ -341,6 +404,11 @@ def assemble_features(df: pd.DataFrame) -> pd.DataFrame:
     df = add_boolean_counts(df, groups=grouped)
     df = add_stack_aggregates(df)
     df = add_experience_flags(df)
+    df = add_grade_from_experience(df)
+    if "grade" in df.columns:
+        df["grade_final"] = df["grade"].where(df["grade"] != "unknown", df["grade_from_experience"])
+    else:
+        df["grade_final"] = df["grade_from_experience"]
     df = add_primary_role(df)
     df = add_salary_bucket(df)
     df = add_structured_text_features(df)

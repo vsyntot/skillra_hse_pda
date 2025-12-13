@@ -266,9 +266,10 @@ def top_value_counts(df: pd.DataFrame, col: str, top_n: int = 15) -> pd.Series:
     return df[col].value_counts().head(top_n)
 
 
-def skill_frequency(df: pd.DataFrame, skill_cols: Iterable[str], top_n: int = 15) -> pd.Series:
-    """Return aggregated frequencies for provided skill columns."""
-    present = [col for col in skill_cols if col in df.columns]
+def skill_frequency(df: pd.DataFrame, skill_cols: Iterable[str] | None = None, top_n: int = 15) -> pd.Series:
+    """Return aggregated frequencies for provided (or inferred) skill columns."""
+    resolved_skills = hard_skill_columns(df) if skill_cols is None else list(skill_cols)
+    present = [col for col in resolved_skills if col in df.columns]
     if not present:
         return pd.Series(dtype="float64")
     freq = df[present].mean().sort_values(ascending=False)
@@ -277,7 +278,7 @@ def skill_frequency(df: pd.DataFrame, skill_cols: Iterable[str], top_n: int = 15
 
 def skill_share_by_grade(
     df: pd.DataFrame,
-    skill_cols: list[str],
+    skill_cols: list[str] | None = None,
     grade_col: str = "grade",
 ) -> pd.DataFrame:
     """Compute share of vacancies with each skill across grades."""
@@ -285,7 +286,8 @@ def skill_share_by_grade(
     if grade_col not in df.columns:
         raise ValueError("expected grade column for skill_share_by_grade")
 
-    available = [col for col in skill_cols if col in df.columns]
+    resolved_skills = hard_skill_columns(df) if skill_cols is None else list(skill_cols)
+    available = [col for col in resolved_skills if col in df.columns]
     if not available:
         return pd.DataFrame()
 
