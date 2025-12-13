@@ -8,7 +8,7 @@
 ### Политика NaN/`unknown`
 - текстовые маркеры неопределённости (`unknown`, `не указано`, пустые строки, `n/a` и т.п.) нормализуются в `NaN`;
 - без глобального заполнения: числовые признаки (включая `salary_from`, `salary_to`, `salary_mid`, `employer_rating`) остаются `NaN`, исключение — явные счётчики (`*_count`, `employer_reviews_count` и др.), которые приводятся к `0`;
-- строковые признаки НЕ заполняются `"unknown"` глобально; осмысленный `"unknown"` сохраняется только в ограниченном наборе колонок (`grade`, `work_format`, `work_mode`, `employment_type`, `schedule`, `city_tier`, `lang_english_level`, `employer_type`), для остальных пропуски остаются `NaN` и показываются как «не указано» на уровне EDA;
+- строковые признаки НЕ заполняются `"unknown"` глобально; осмысленный `"unknown"` сохраняется только в ограниченном наборе колонок (`grade`, `grade_final`, `work_format`, `work_mode`, `employment_type`, `schedule`, `city_tier`, `lang_english_level`, `employer_type`), для остальных пропуски остаются `NaN` и показываются как «не указано» на уровне EDA;
 - булевы столбцы нормализуются в `boolean` с `NaN`, если данные отсутствуют;
 - в отчёте явно показывается доля `NaN`/`unknown` по ключевым блокам (зарплата, формат работы, английский, грейд) чтобы не терять покрытие.
 
@@ -182,7 +182,7 @@
 - `is_remote` — допускает полную удалёнку.
 - `is_hybrid` — гибрид (часть офис, часть удалёнка).
 - `work_mode` — агрегированный формат с приоритетом явного `work_format`, затем `is_remote`/`is_hybrid`; значения `remote / hybrid / office / field / unknown`.
-- `unknown` в `work_mode` — формат не распознан (≈34% строк), поэтому доли форматов в аналитике нужно трактовать осторожно.
+- `unknown` в `work_mode` — формат не распознан и явно показан в отчёте, чтобы доли форматов интерпретировались корректно.
 
 **Зачем продукту**
 - удалёнка — ключевой фильтр и фактор выбора;
@@ -214,8 +214,8 @@
   - senior/ведущий/старший → `senior`
   - возможны `lead`, `head` и т.п.
 - `grade_from_experience` — грейд-прокси из опыта: 0–1 → `intern`, 1–3 → `junior`, 3–5 → `middle`, 5–8 → `senior`, 8+ → `lead`
-  (fallback по строке `experience`, если чисел нет).
-- `grade_final` — итоговый грейд для аналитики: берём `grade`, если он известен, иначе `grade_from_experience`.
+  (использует числовые границы `exp_min_years`/`exp_max_years`, иначе fallback по тексту `experience`).
+- `grade_final` — итоговый грейд для аналитики: берём `grade`, если он известен, иначе `grade_from_experience`; используется во всех графиках и персона-аналитике.
 - `is_junior_friendly` — булев флаг, если вакансия явно допускает студентов/без опыта/входит в junior-пул (объединение `is_for_juniors`, `allows_students`, `exp_is_no_experience`).
 - `battle_experience` — обратный флаг к `is_junior_friendly`, подчёркивает требование «боевого» опыта.
 
@@ -309,9 +309,9 @@
 
 **Таксономия hard skills в EDA**
 
-- используем объединение столбцов `skill_*` и технологических `has_*`;
+- используем объединение столбцов `skill_*` и технологических `has_*` (функция `eda.hard_skill_columns`);
 - явно исключаем нефункциональные флаги (`has_metro`, `has_test_task`, `has_mentoring` и другие, которые не описывают навык);
-- доли навыков на графиках считаются как доля вакансий с флагом навыка (market share).
+- доли навыков на графиках считаются как доля вакансий с флагом навыка (market share); этот же список используется в ноутбуке, HTML и persona skill-gap, чтобы избежать разъезда вселенных навыков.
 
 ### 10.1. Языки и фреймворки (has_*) — ~44 признака
 **Языки программирования**
@@ -341,6 +341,7 @@
 **Логика**
 - поиск упоминаний в `title + description + skills` по паттернам/регэкспам (case-insensitive, с вариантами написания).
 - флаг `True`, если технология упоминается явно.
+- Сервисные флаги `has_metro`/`has_mentoring`/`has_test_task` сохраняются для аналитики формата/джуниорности, но исключаются из `hard_skill_columns`, чтобы не попадать в топ навыков или persona skill-gap.
 
 ### 10.2. Специализированные data-навыки (skill_*)
 **Колонки**
@@ -550,7 +551,7 @@
 | `salary_bucket` | category | квантиль по `salary_mid_rub_capped` | стабильные разрезы зарплат без влияния выбросов |
 | `city_tier` | category | нормализация `city` | укрупнённые города: Москва/СПб/миллионники/прочие/KZ |
 | `work_mode` | category | агрегат `work_format`, `is_remote`, `is_hybrid` | единый формат для аналитики по удалёнке/гибриду |
-| `grade_from_experience`, `grade_final` | category | правила на основе `exp_*` и fallback из `experience` | прокси-грейд и итоговый грейд для аналитики/персон |
+| `grade_from_experience`, `grade_final` | category | правила на основе `exp_*` и fallback из `experience` | прокси-грейд и итоговый грейд для аналитики/персон; `grade_final` стабилизирует долю unknown в графиках |
 | `role_count`, `primary_role` | int / category | сумма и приоритизация `role_*` | ширина роли и аккуратные срезы по основной роли |
 | `is_junior_friendly`, `battle_experience` | bool | агрегат `is_for_juniors`/`allows_students`/`exp_is_no_experience` | фильтры «подходит новичкам» vs «нужен боевой опыт» |
 | `description_len_chars`, `description_len_words` | int | длина `description` | полнота описания |
