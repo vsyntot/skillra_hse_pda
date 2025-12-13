@@ -14,13 +14,23 @@ def missing_share(df: pd.DataFrame, top_n: int = 20) -> pd.Series:
 def hard_skill_columns(df: pd.DataFrame) -> list[str]:
     """Return hard skill columns combining skill_* and relevant has_* flags."""
 
-    skill_cols = [col for col in df.columns if col.startswith("skill_")]
+    skill_noise = {
+        "skill_php",
+        "skill_javascript",
+        "skill_html",
+        "skill_css",
+    }
+    skill_cols = [col for col in df.columns if col.startswith("skill_") and col not in skill_noise]
     has_cols = [col for col in df.columns if col.startswith("has_")]
 
     excluded = {
         "has_metro",
         "has_test_task",
         "has_mentoring",
+        "has_php",
+        "has_javascript",
+        "has_html",
+        "has_css",
     }
     has_skill_cols = [col for col in has_cols if col not in excluded]
 
