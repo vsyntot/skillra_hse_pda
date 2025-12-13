@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import mimetypes
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -257,6 +260,38 @@ def inject_toc(html: str) -> str:
     return html.replace(marker, f"{marker}\n{TOC_SNIPPET}", 1)
 
 
+def embed_local_images(html: str) -> str:
+    """Inline local images referenced by <img src> into data URLs.
+
+    Nbconvert already embeds matplotlib outputs, but images referenced via
+    ``<img src="reports/figures/...">`` may remain as external files.
+    This helper reads such files and replaces the ``src`` attribute with a
+    base64-encoded data URL to guarantee the HTML report is self-contained.
+    """
+
+    def to_data_uri(src: str) -> str:
+        if src.startswith(("data:", "http://", "https://")):
+            return src
+
+        candidate_paths = [ROOT / src, NOTEBOOK.parent / src]
+        for path in candidate_paths:
+            if path.exists():
+                mime, _ = mimetypes.guess_type(path.name)
+                encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+                return f"data:{mime or 'application/octet-stream'};base64,{encoded}"
+
+        return src
+
+    pattern = re.compile(r"(<img[^>]+src=)([\"'])([^\"']+)([\"'][^>]*>)", re.IGNORECASE)
+
+    def replacer(match: re.Match[str]) -> str:
+        prefix, quote, src, suffix = match.groups()
+        inlined = to_data_uri(src)
+        return f"{prefix}{quote}{inlined}{quote}{suffix}"
+
+    return pattern.sub(replacer, html)
+
+
 def execute_notebook() -> nbformat.NotebookNode:
     """Run the primary notebook and return the executed notebook node."""
 
@@ -289,7 +324,8 @@ def export_to_html(nb: nbformat.NotebookNode) -> str:
     }
 
     body, _ = exporter.from_notebook_node(nb, resources=resources)
-    return inject_toc(body)
+    body = inject_toc(body)
+    return embed_local_images(body)
 
 
 def main() -> None:
