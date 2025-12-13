@@ -92,6 +92,54 @@ def salary_by_primary_role(df: pd.DataFrame, salary_col: str = "salary_mid_rub_c
     return salary_summary_by_category(df, "primary_role", salary_col)
 
 
+def salary_by_roles(
+    df: pd.DataFrame,
+    roles: Iterable[str],
+    salary_col: str = "salary_mid_rub_capped",
+    primary_role_col: str = "primary_role",
+) -> pd.DataFrame:
+    """Summarize salary stats for key roles using role_* flags with primary_role fallback.
+
+    For each requested role the function first looks for a corresponding ``role_<role>``
+    boolean column. If it exists, the selection is based on that flag; otherwise it falls
+    back to rows where ``primary_role`` matches the role name (case-insensitive).
+
+    Returns a table with counts and salary quartiles per role. Roles with zero matching
+    rows are kept with ``n=0`` and ``NaN`` salary stats so that downstream visualizations
+    can surface a "недостаточно данных" warning instead of failing silently.
+    """
+
+    if salary_col not in df.columns:
+        raise ValueError(f"expected column {salary_col} for salary_by_roles")
+
+    if not roles:
+        return pd.DataFrame(columns=["role", "n", "salary_median", "salary_p25", "salary_p75"])
+
+    results: list[dict[str, object]] = []
+    for role in roles:
+        role_col = f"role_{role}"
+        if role_col in df.columns:
+            mask = df[role_col].fillna(False).astype(bool)
+        elif primary_role_col in df.columns:
+            mask = df[primary_role_col].astype(str).str.lower() == str(role).lower()
+        else:
+            mask = pd.Series(False, index=df.index)
+
+        subset = df.loc[mask, salary_col]
+        n = int(subset.shape[0])
+        results.append(
+            {
+                "role": role,
+                "n": n,
+                "salary_median": subset.median() if n else pd.NA,
+                "salary_p25": subset.quantile(0.25) if n else pd.NA,
+                "salary_p75": subset.quantile(0.75) if n else pd.NA,
+            }
+        )
+
+    return pd.DataFrame(results)
+
+
 def salary_by_experience_bucket(df: pd.DataFrame, salary_col: str = "salary_mid_rub_capped") -> pd.DataFrame:
     base = None
     if "exp_min_years" in df.columns:
@@ -570,6 +618,7 @@ __all__ = [
     "salary_by_city_tier",
     "salary_by_grade",
     "salary_by_primary_role",
+    "salary_by_roles",
     "salary_by_experience_bucket",
     "salary_by_english_level",
     "english_requirement_stats",
