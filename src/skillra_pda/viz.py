@@ -119,6 +119,102 @@ def salary_by_role_box(
     return _finalize_figure(fig, "fig_salary_by_role_box.png", return_fig)
 
 
+def salary_by_roles_bar(
+    summary_df: pd.DataFrame,
+    filename: str | Path = "fig_salary_key_roles.png",
+    return_fig: bool = False,
+):
+    """Bar chart of salary medians for key roles with vacancy counts on labels.
+
+    Handles cases with zero data by rendering a textual warning instead of raising
+    errors, so downstream notebooks can still show a meaningful message.
+    """
+
+    _require_columns(summary_df, ["role", "n", "salary_median"], "salary_by_roles_bar")
+
+    total_n = int(summary_df["n"].sum()) if not summary_df.empty else 0
+    if summary_df.empty:
+        fig, ax = plt.subplots(figsize=BAR_FIGSIZE)
+        ax.axis("off")
+        ax.text(0.5, 0.5, "Недостаточно данных для выбранных ролей (N=0)", ha="center", va="center")
+        return _finalize_figure(fig, filename, return_fig)
+
+    positive = summary_df[summary_df["n"] > 0].copy()
+    ordered_roles = list(summary_df["role"])
+    if positive.empty:
+        fig, ax = plt.subplots(figsize=BAR_FIGSIZE)
+        ax.axis("off")
+        ax.text(
+            0.5,
+            0.6,
+            f"Недостаточно данных для выбранных ролей (N={total_n})",
+            ha="center",
+            va="center",
+            wrap=True,
+        )
+        missing_roles = summary_df[summary_df["n"] == 0]["role"].tolist()
+        if missing_roles:
+            ax.text(
+                0.5,
+                0.4,
+                "Нет выборки для: " + ", ".join(missing_roles),
+                ha="center",
+                va="center",
+                fontsize=9,
+                color="darkred",
+            )
+        return _finalize_figure(fig, filename, return_fig)
+
+    positive["role"] = pd.Categorical(positive["role"], categories=ordered_roles, ordered=True)
+    positive = positive.sort_values("role")
+
+    salary_values = positive["salary_median"].astype(float).fillna(0)
+    fig, ax = plt.subplots(figsize=BAR_FIGSIZE)
+    bars = ax.bar(positive["role"], salary_values, color="steelblue")
+    ax.set_ylabel("Медианная зарплата (RUB)")
+    ax.set_xlabel("Роль")
+    ax.set_title("Зарплаты по ключевым ролям")
+    ax.tick_params(axis="x", rotation=45)
+
+    for bar, n in zip(bars, positive["n"]):
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            height if height > 0 else ax.get_ylim()[0],
+            f"N={int(n)}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
+
+    missing_roles = summary_df[summary_df["n"] == 0]["role"].tolist()
+    if missing_roles:
+        ax.text(
+            0.99,
+            0.95,
+            "Нет данных: " + ", ".join(missing_roles),
+            transform=ax.transAxes,
+            ha="right",
+            va="top",
+            fontsize=9,
+            color="darkred",
+            bbox={"facecolor": "#fff7f7", "edgecolor": "darkred", "alpha": 0.8},
+        )
+
+    ax.text(
+        0.01,
+        0.95,
+        f"Всего вакансий в срезе: {total_n}",
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=9,
+        color="dimgray",
+    )
+
+    return _finalize_figure(fig, filename, return_fig)
+
+
 def salary_by_grade_city_heatmap(
     summary_df: pd.DataFrame, value_col: str = "median", return_fig: bool = False
 ):
