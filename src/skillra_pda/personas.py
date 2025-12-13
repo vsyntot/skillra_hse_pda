@@ -402,7 +402,7 @@ def plot_persona_skill_gap(
         fig.text(
             0.01,
             0.01,
-            "⚠️ " + " | ".join(warnings),
+            "Внимание: " + " | ".join(warnings),
             ha="left",
             va="bottom",
             fontsize=9,
