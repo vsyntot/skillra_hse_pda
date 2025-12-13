@@ -18,11 +18,27 @@ NOISY_SKILLS = {
     "has_relocation",
     "has_metro",
     "has_mentoring",
+    # web-артефакты, нерелевантные data-персонам и создающие шум
+    "has_php",
+    "has_javascript",
+    "has_html",
+    "has_css",
     "skill_php",
     "skill_javascript",
     "skill_html",
     "skill_css",
     "skill_git",
+}
+
+WEB_NOISE_SKILLS = {
+    "has_php",
+    "has_javascript",
+    "has_html",
+    "has_css",
+    "skill_php",
+    "skill_javascript",
+    "skill_html",
+    "skill_css",
 }
 
 
@@ -98,6 +114,12 @@ def _apply_filters(df: pd.DataFrame, filters: Sequence[tuple[str, object]]):
             filtered = filtered[filtered[col] == value]
         applied[col] = value
     return filtered, applied
+
+
+def _is_data_persona(persona: Persona) -> bool:
+    role = (persona.target_role or "").lower()
+    keywords = ("analyst", "data", "ml", "bi", "product")
+    return any(key in role for key in keywords)
 
 
 def _filter_by_target(
@@ -202,6 +224,7 @@ def build_skill_demand_profile(
             if c.startswith(skill_prefixes) and c not in NOISY_SKILLS
         ]
     )
+    resolved_skill_cols = [col for col in resolved_skill_cols if col not in NOISY_SKILLS]
     if not resolved_skill_cols:
         return pd.DataFrame(columns=["skill_name", "market_share"])
     rows: list[dict[str, object]] = []
@@ -246,6 +269,12 @@ def skill_gap_for_persona(
         min_market_n=min_market_n,
         filter_result=result,
     )
+    if not demand.empty:
+        demand = demand[~demand["skill_name"].isin(NOISY_SKILLS)].reset_index(drop=True)
+        if _is_data_persona(persona):
+            demand = demand[
+                ~demand["skill_name"].isin(WEB_NOISE_SKILLS)
+            ].reset_index(drop=True)
     if skill_cols:
         demand = demand[demand["skill_name"].isin(skill_cols)]
 
