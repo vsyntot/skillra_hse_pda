@@ -15,7 +15,7 @@ ensure_directories()
 
 BAR_FIGSIZE = (10, 6)
 HEATMAP_FIGSIZE = (10, 7)
-GRADE_ORDER = ["intern", "junior", "middle", "senior", "lead", "architect", "unknown"]
+GRADE_ORDER = ["intern", "junior", "middle", "senior", "lead", "unknown"]
 ENGLISH_ORDER = ["no_english", "A1", "A2", "B1", "B2", "C1_plus", "unknown"]
 WORK_MODE_ORDER = ["office", "hybrid", "remote", "field", "unknown"]
 
