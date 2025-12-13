@@ -8,9 +8,22 @@ from typing import Any, Dict, List, Mapping, Sequence
 import pandas as pd
 
 from . import config, eda
+from .viz import _format_filters, _humanize_skill_name
 
 
 MIN_MARKET_N = 80
+NOISY_SKILLS = {
+    # Служебные и шумные флаги, которые не должны доминировать в skill-gap
+    "has_test_task",
+    "has_relocation",
+    "has_metro",
+    "has_mentoring",
+    "skill_php",
+    "skill_javascript",
+    "skill_html",
+    "skill_css",
+    "skill_git",
+}
 
 
 @dataclass
@@ -62,8 +75,10 @@ __all__ = [
 class PersonaFilterResult:
     filtered_df: pd.DataFrame
     applied_filters: Dict[str, object]
+    filters_used: Dict[str, object]
     relaxed_filters: List[str]
     warnings: List[str]
+    grade_column_used: str | None
     min_market_n: int = MIN_MARKET_N
 
     @property
@@ -91,10 +106,11 @@ def _filter_by_target(
     """Filter a dataframe by persona targets and constraints with fallback."""
 
     threshold = MIN_MARKET_N if min_market_n is None else min_market_n
+    grade_col = "grade_final" if "grade_final" in df.columns else "grade"
     filter_specs: list[tuple[str, object]] = []
     mapping: Mapping[str, Any] = {
         "primary_role": persona.target_role,
-        "grade": persona.target_grade,
+        grade_col: persona.target_grade,
         "city_tier": persona.target_city_tier,
         "work_mode": persona.target_work_mode,
     }
@@ -119,11 +135,12 @@ def _filter_by_target(
     relax_order: list[str] = list(persona.constraints.keys()) + [
         "work_mode",
         "city_tier",
-        "grade",
+        grade_col,
         "primary_role",
     ]
 
     can_relax = bool(threshold and len(df) >= threshold and len(filtered) < threshold)
+    grade_relaxed = False
 
     for relax_key in relax_order if can_relax else []:
         if len(filtered) >= threshold:
@@ -133,6 +150,8 @@ def _filter_by_target(
             continue
         active_filters.pop(idx)
         relaxed_filters.append(relax_key)
+        if relax_key == grade_col:
+            grade_relaxed = True
         filtered, applied = _apply_filters(df, active_filters)
 
     if threshold and len(filtered) < threshold:
@@ -144,12 +163,16 @@ def _filter_by_target(
         warnings.append(
             "Ослаблены фильтры для стабильности: " + ", ".join(relaxed_filters)
         )
+    if grade_relaxed:
+        warnings.append("Фильтр по целевому грейду ослаблен из-за малого N рынка.")
 
     return PersonaFilterResult(
         filtered_df=filtered,
         applied_filters=applied,
+        filters_used=applied,
         relaxed_filters=relaxed_filters,
         warnings=warnings,
+        grade_column_used=grade_col if grade_col in df.columns else None,
         min_market_n=threshold,
     )
 
@@ -176,7 +199,7 @@ def build_skill_demand_profile(
         else [
             c
             for c in eda.hard_skill_columns(df_filtered)
-            if c.startswith(skill_prefixes)
+            if c.startswith(skill_prefixes) and c not in NOISY_SKILLS
         ]
     )
     if not resolved_skill_cols:
@@ -234,8 +257,10 @@ def skill_gap_for_persona(
             {
                 "market_n": result.sample_size,
                 "applied_filters": result.applied_filters,
+                "filters_used": result.filters_used,
                 "relaxed_filters": result.relaxed_filters,
                 "warnings": result.warnings,
+                "grade_column_used": result.grade_column_used,
                 "min_market_n": result.min_market_n,
             }
         )
@@ -251,8 +276,10 @@ def skill_gap_for_persona(
         {
             "market_n": result.sample_size,
             "applied_filters": result.applied_filters,
+            "filters_used": result.filters_used,
             "relaxed_filters": result.relaxed_filters,
             "warnings": result.warnings,
+            "grade_column_used": result.grade_column_used,
             "min_market_n": result.min_market_n,
         }
     )
@@ -314,7 +341,9 @@ def analyze_persona(df: pd.DataFrame, persona: Persona, top_k: int = 10) -> dict
         "recommended_skills": recommended_skills,
         "top_skill_demand": top_demand,
         "applied_filters": filter_result.applied_filters,
+        "filters_used": filter_result.filters_used,
         "warnings": filter_result.warnings,
+        "grade_column_used": filter_result.grade_column_used,
     }
 
 
@@ -338,7 +367,8 @@ def plot_persona_skill_gap(
     top_missing = missing.sort_values(by="market_share", ascending=False)
     fig, ax = plt.subplots(figsize=(10, 6))
     shares_pct = top_missing["market_share"] * 100
-    bars = ax.barh(top_missing["skill_name"], shares_pct)
+    skill_labels = [_humanize_skill_name(raw) for raw in top_missing["skill_name"]]
+    bars = ax.barh(skill_labels, shares_pct)
     ax.invert_yaxis()
     ax.set_xlabel("Доля вакансий с навыком, %")
 
@@ -353,17 +383,36 @@ def plot_persona_skill_gap(
 
     market_n = gap_df.attrs.get("market_n")
     relaxed = gap_df.attrs.get("relaxed_filters") or []
-    title_parts = [f"Skill gap для персоны: {persona.name}"]
+    min_market_n = gap_df.attrs.get("min_market_n")
+    filters_used = gap_df.attrs.get("filters_used") or gap_df.attrs.get("applied_filters")
+    warnings = gap_df.attrs.get("warnings") or []
+    subtitle_parts = []
     if market_n is not None:
-        title_parts.append(f"n={market_n}")
+        subtitle_parts.append(f"N рынка: {market_n}")
+    if min_market_n is not None:
+        subtitle_parts.append(f"min_n={min_market_n}")
+    subtitle_parts.append(_format_filters(filters_used))
     if relaxed:
-        title_parts.append("ослаблены: " + ", ".join(relaxed))
-    ax.set_title(" | ".join(title_parts))
+        subtitle_parts.append("Ослаблены фильтры: " + ", ".join(relaxed))
+
+    ax.set_title(" | ".join(subtitle_parts), fontsize=10)
+    fig.suptitle(f"Skill gap для персоны: {persona.name}", fontsize=13, y=0.98)
+
+    if warnings:
+        fig.text(
+            0.01,
+            0.01,
+            "⚠️ " + " | ".join(warnings),
+            ha="left",
+            va="bottom",
+            fontsize=9,
+            color="darkred",
+        )
 
     output_dir = output_dir or config.FIGURES_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"fig_persona_{persona.name.lower().replace(' ', '_')}_skill_gap.png"
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.08, 1, 0.95))
     fig.savefig(output_path, dpi=200)
     if not return_fig:
         plt.close(fig)

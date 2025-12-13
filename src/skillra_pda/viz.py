@@ -38,6 +38,39 @@ def _save_fig(fig: plt.Figure, filename: str | Path, close: bool = True) -> Path
     return output
 
 
+def _humanize_skill_name(raw: str) -> str:
+    name = raw
+    for prefix in ("skill_", "has_"):
+        if name.startswith(prefix):
+            name = name[len(prefix) :]
+            break
+    words = name.split("_")
+    mapping = {
+        "sql": "SQL",
+        "python": "Python",
+        "excel": "Excel",
+        "powerbi": "Power BI",
+        "ml": "ML",
+        "ai": "AI",
+        "qa": "QA",
+    }
+    processed = [mapping.get(w.lower(), w.capitalize() if len(w) > 3 else w.upper()) for w in words]
+    return " ".join(processed)
+
+
+def _format_filters(filters_used: dict[str, object] | None) -> str:
+    if not filters_used:
+        return "Фильтры: нет"
+    parts = []
+    for key, value in filters_used.items():
+        if isinstance(value, (list, tuple, set)):
+            rendered = ", ".join(map(str, value))
+        else:
+            rendered = str(value)
+        parts.append(f"{key}={rendered}")
+    return "Фильтры: " + "; ".join(parts)
+
+
 def _finalize_figure(fig: plt.Figure, filename: str | Path, return_fig: bool = False):
     path = _save_fig(fig, filename, close=not return_fig)
     if return_fig:
