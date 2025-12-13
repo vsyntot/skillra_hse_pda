@@ -199,6 +199,8 @@
 - `exp_max_years`
 - `exp_is_no_experience`
 - `grade` (junior/middle/senior/lead/...)
+- `grade_from_experience`
+- `grade_final`
 - `is_junior_friendly`
 - `battle_experience`
 
@@ -211,6 +213,9 @@
   - middle/без указания → `middle` (по умолчанию)
   - senior/ведущий/старший → `senior`
   - возможны `lead`, `head` и т.п.
+- `grade_from_experience` — грейд-прокси из опыта: 0–1 → `intern`, 1–3 → `junior`, 3–5 → `middle`, 5–8 → `senior`, 8+ → `lead`
+  (fallback по строке `experience`, если чисел нет).
+- `grade_final` — итоговый грейд для аналитики: берём `grade`, если он известен, иначе `grade_from_experience`.
 - `is_junior_friendly` — булев флаг, если вакансия явно допускает студентов/без опыта/входит в junior-пул (объединение `is_for_juniors`, `allows_students`, `exp_is_no_experience`).
 - `battle_experience` — обратный флаг к `is_junior_friendly`, подчёркивает требование «боевого» опыта.
 
@@ -545,6 +550,7 @@
 | `salary_bucket` | category | квантиль по `salary_mid_rub_capped` | стабильные разрезы зарплат без влияния выбросов |
 | `city_tier` | category | нормализация `city` | укрупнённые города: Москва/СПб/миллионники/прочие/KZ |
 | `work_mode` | category | агрегат `work_format`, `is_remote`, `is_hybrid` | единый формат для аналитики по удалёнке/гибриду |
+| `grade_from_experience`, `grade_final` | category | правила на основе `exp_*` и fallback из `experience` | прокси-грейд и итоговый грейд для аналитики/персон |
 | `role_count`, `primary_role` | int / category | сумма и приоритизация `role_*` | ширина роли и аккуратные срезы по основной роли |
 | `is_junior_friendly`, `battle_experience` | bool | агрегат `is_for_juniors`/`allows_students`/`exp_is_no_experience` | фильтры «подходит новичкам» vs «нужен боевой опыт» |
 | `description_len_chars`, `description_len_words` | int | длина `description` | полнота описания |
